@@ -528,6 +528,65 @@
     color: var(--text2);
   }
   .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+
+  /* Month grid — fixed 12 months */
+  .month-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .month-cell {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .month-cell:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(108,92,231,0.15);
+  }
+  .month-cell.has-data {
+    border-color: var(--green);
+    background: rgba(0,184,148,0.06);
+  }
+  .month-cell .m-month-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    margin-bottom: 8px;
+  }
+  .month-cell.has-data .m-month-label {
+    color: var(--green);
+  }
+  .month-cell input[type="number"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: var(--text);
+    font-size: 14px;
+    text-align: center;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .month-cell input[type="number"]:focus {
+    border-color: var(--accent);
+  }
+  .month-cell input[type="number"]::placeholder {
+    color: var(--text2);
+    opacity: 0.4;
+  }
+
+  @media (max-width: 640px) {
+    .month-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 420px) {
+    .month-grid { grid-template-columns: repeat(2, 1fr); }
+  }
 </style>
 </head>
 <body>
@@ -545,84 +604,12 @@
 
   <!-- Tabs -->
   <div class="tabs">
-    <button class="tab active" data-tab="single">🧮 单笔计算</button>
-    <button class="tab" data-tab="multi">📅 多月累计</button>
+    <button class="tab active" data-tab="multi">📅 多月累计</button>
     <button class="tab" data-tab="batch">📁 批量计算</button>
   </div>
 
-  <!-- ====== 单笔计算 ====== -->
-  <div class="panel active" id="panel-single">
-    <div class="card">
-      <div class="card-title"><span class="icon" style="background:rgba(108,92,231,0.15);">🧮</span> 单笔劳务报酬计算</div>
-
-      <div class="direction-toggle">
-        <button class="direction-btn active" data-dir="forward" data-target="single">税前 → 税后</button>
-        <button class="direction-btn" data-dir="reverse" data-target="single">税后 → 税前</button>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label id="single-amount-label">本次收入（元）</label>
-          <input type="number" id="single-amount" placeholder="请输入金额" step="0.01" min="0">
-        </div>
-        <div class="form-group">
-          <label>本年累计月数</label>
-          <select id="single-month-num" onchange="updateSingleDeductionHint()">
-            <option value="1">第 1 个月（减除 5,000）</option>
-            <option value="2">第 2 个月（减除 10,000）</option>
-            <option value="3">第 3 个月（减除 15,000）</option>
-            <option value="4">第 4 个月（减除 20,000）</option>
-            <option value="5">第 5 个月（减除 25,000）</option>
-            <option value="6">第 6 个月（减除 30,000）</option>
-            <option value="7">第 7 个月（减除 35,000）</option>
-            <option value="8">第 8 个月（减除 40,000）</option>
-            <option value="9">第 9 个月（减除 45,000）</option>
-            <option value="10">第 10 个月（减除 50,000）</option>
-            <option value="11">第 11 个月（减除 55,000）</option>
-            <option value="12">第 12 个月（减除 60,000）</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-group" style="margin-bottom:16px;">
-        <label>本次之前的本年累计预扣收入额（元）<span style="opacity:0.6;font-size:11px;"> — 即历史各月 收入×80% 的总和，首次发放填 0</span></label>
-        <input type="number" id="single-cum-income" placeholder="0（首次发放可不填）" step="0.01" min="0" value="0">
-      </div>
-
-      <div id="single-deduction-hint" style="font-size:12px;color:var(--text2);margin-bottom:16px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);">
-        累计减除费用 = 5,000 × <span id="hint-months">1</span> = <strong style="color:var(--text);">¥5,000.00</strong>
-      </div>
-
-      <div class="btn-row">
-        <button class="btn btn-primary" onclick="calcSingle()">计算</button>
-        <button class="btn btn-secondary" onclick="resetSingle()">清空</button>
-      </div>
-    </div>
-
-    <div id="single-result" style="display:none;">
-      <div class="summary-grid">
-        <div class="summary-item">
-          <div class="label" id="s-sum1-label">税前收入</div>
-          <div class="value blue" id="s-pre">-</div>
-        </div>
-        <div class="summary-item">
-          <div class="label">预扣税额</div>
-          <div class="value red" id="s-tax">-</div>
-        </div>
-        <div class="summary-item">
-          <div class="label" id="s-sum3-label">税后收入</div>
-          <div class="value green" id="s-post">-</div>
-        </div>
-        <div class="summary-item">
-          <div class="label">实际税负率</div>
-          <div class="value orange" id="s-rate">-</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- ====== 多月累计 ====== -->
-  <div class="panel" id="panel-multi">
+  <div class="panel active" id="panel-multi">
     <div class="card">
       <div class="card-title"><span class="icon" style="background:rgba(0,184,148,0.15);">📅</span> 多月累计预扣计算</div>
 
@@ -637,17 +624,15 @@
           <div class="toggle-hint">开启后，相邻月份如果中断超过1个月，累计自动归零重新起算</div>
         </div>
         <label class="toggle-switch">
-          <input type="checkbox" checked onchange="multiGapReset=this.checked;">
+          <input type="checkbox" checked id="multi-gap-toggle">
           <span class="slider"></span>
         </label>
       </div>
 
-      <p style="font-size:13px;color:var(--text2);margin-bottom:16px;">输入每月税前/税后收入，系统自动按累计预扣法逐月计算个税。</p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:6px;">输入每月收入，留空的月份自动跳过。断月重置会检测跳过的月份间隔。</p>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:16px;">年份：<input type="number" id="multi-year" min="2000" max="2100" style="width:80px;display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px;text-align:center;outline:none;"> 年（计算跨年数据时请分年计算）</p>
 
-      <div class="month-list" id="month-list">
-        <!-- dynamic rows -->
-      </div>
-      <button class="add-month-btn" onclick="addMonth()">+ 添加月份</button>
+      <div class="month-grid" id="month-grid"></div>
 
       <div class="btn-row">
         <button class="btn btn-primary" onclick="calcMulti()">计算全部</button>
@@ -800,12 +785,9 @@ function isGapMonth(prevMonth, curMonth) {
 
 // ==================== State ====================
 
-let singleDirection = 'forward';
-let multiDirection = 'forward';
-let batchDirection = 'forward';
-let multiGapReset = true;
-let batchGapReset = true;
-let monthCounter = 0;
+var multiDirection = 'forward';
+var batchDirection = 'forward';
+var batchGapReset = true;
 
 // ==================== Tabs ====================
 
@@ -827,148 +809,80 @@ document.querySelectorAll('.direction-btn').forEach(btn => {
     btn.parentElement.querySelectorAll('.direction-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
-    if (target === 'single') {
-      singleDirection = dir;
-      document.getElementById('single-amount-label').textContent = dir === 'forward' ? '本次收入（税前，元）' : '本次收入（税后，元）';
-    } else if (target === 'multi') {
+    if (target === 'multi') {
       multiDirection = dir;
-      const label = dir === 'forward' ? '税前收入（元）' : '税后收入（元）';
-      document.querySelectorAll('#month-list .month-row .form-group:nth-child(2) label').forEach(l => {
-        l.textContent = label;
-      });
     } else {
       batchDirection = dir;
     }
   });
 });
 
-// ==================== Single calc ====================
 
-function updateSingleDeductionHint() {
-  const monthNum = parseInt(document.getElementById('single-month-num').value) || 1;
-  const deduction = monthNum * 5000;
-  document.getElementById('hint-months').textContent = monthNum;
-  document.getElementById('single-deduction-hint').querySelector('strong').textContent = '¥' + formatNum(deduction);
+// ==================== Multi-month: 12-Month Grid ====================
+
+const MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+function buildMonthGrid() {
+  // Set year default
+  const yearInput = document.getElementById('multi-year');
+  if (yearInput && !yearInput.value) yearInput.value = new Date().getFullYear();
+
+  const grid = document.getElementById('month-grid');
+  grid.innerHTML = '';
+  for (let m = 1; m <= 12; m++) {
+    const cell = document.createElement('div');
+    cell.className = 'month-cell';
+    cell.innerHTML = `
+      <div class="m-month-label">${MONTH_NAMES[m-1]}</div>
+      <input type="number" id="m-amount-${m}" placeholder="0.00" step="0.01" min="0"
+             oninput="onMonthAmountInput(this)">
+    `;
+    grid.appendChild(cell);
+  }
 }
 
-function calcSingle() {
-  const amount = parseFloat(document.getElementById('single-amount').value);
-  if (isNaN(amount) || amount < 0) return alert('请输入有效金额');
-
-  const monthNum = parseInt(document.getElementById('single-month-num').value) || 1;
-  const cumDeduction = monthNum * 5000;
-  const cumIncomeBefore = parseFloat(document.getElementById('single-cum-income').value) || 0;
-
-  // 根据累计预扣收入额反推累计已预扣税额
-  const prevBracket = getBracket(cumIncomeBefore);
-  const cumTaxBefore = Math.max(0, cumIncomeBefore * prevBracket.rate - prevBracket.quick);
-
-  let result;
-  if (singleDirection === 'forward') {
-    result = calcTaxForward(amount, cumIncomeBefore, cumDeduction, cumTaxBefore);
+function onMonthAmountInput(input) {
+  const cell = input.parentElement;
+  const val = parseFloat(input.value);
+  if (!isNaN(val) && val > 0) {
+    cell.classList.add('has-data');
   } else {
-    result = calcTaxReverse(amount, cumIncomeBefore, cumDeduction, cumTaxBefore);
+    cell.classList.remove('has-data');
   }
-
-  document.getElementById('single-result').style.display = '';
-  document.getElementById('s-pre').textContent = '¥' + formatNum(result.preTax);
-  document.getElementById('s-tax').textContent = '¥' + formatNum(result.currentTax);
-  document.getElementById('s-post').textContent = '¥' + formatNum(result.postTax);
-  document.getElementById('s-rate').textContent = (result.effectiveRate * 100).toFixed(2) + '%';
-
-  document.getElementById('s-sum1-label').textContent = singleDirection === 'forward' ? '税前收入' : '税前收入（反算）';
-  document.getElementById('s-sum3-label').textContent = singleDirection === 'forward' ? '税后收入' : '税后收入（已知）';
-}
-
-function resetSingle() {
-  document.getElementById('single-amount').value = '';
-  document.getElementById('single-cum-income').value = '0';
-  document.getElementById('single-month-num').value = '1';
-  updateSingleDeductionHint();
-  document.getElementById('single-result').style.display = 'none';
-}
-
-// ==================== Multi-month calc ====================
-
-function addMonth(preset = '') {
-  monthCounter++;
-  const list = document.getElementById('month-list');
-  const row = document.createElement('div');
-  row.className = 'month-row';
-  row.id = 'month-' + monthCounter;
-  row.innerHTML = `
-    <div class="form-group">
-      <label>月份</label>
-      <input type="month" class="m-month" value="${preset || getDefaultMonth(list)}">
-    </div>
-    <div class="form-group">
-      <label>${multiDirection === 'forward' ? '税前收入' : '税后收入'}（元）</label>
-      <input type="number" class="m-amount" placeholder="0.00" step="0.01" min="0">
-    </div>
-    <div class="form-group">
-      <label>备注</label>
-      <input type="text" class="m-note" placeholder="可选">
-    </div>
-    <button class="remove-btn" onclick="this.parentElement.remove()" title="删除">✕</button>
-  `;
-  list.appendChild(row);
-}
-
-function getDefaultMonth(list) {
-  const rows = list.querySelectorAll('.m-month');
-  if (rows.length === 0) {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  }
-  const last = rows[rows.length - 1].value;
-  if (!last) return '';
-  const [y, m] = last.split('-').map(Number);
-  const nm = m === 12 ? 1 : m + 1;
-  const ny = m === 12 ? y + 1 : y;
-  return `${ny}-${String(nm).padStart(2,'0')}`;
 }
 
 function calcMulti() {
-  const rows = document.querySelectorAll('#month-list .month-row');
-  if (rows.length === 0) return alert('请先添加月份');
+  const yearInput = document.getElementById('multi-year');
+  const year = parseInt(yearInput.value) || new Date().getFullYear();
 
+  // Collect filled months
   const data = [];
-  rows.forEach(row => {
-    const month = row.querySelector('.m-month').value || '-';
-    const amount = parseFloat(row.querySelector('.m-amount').value) || 0;
-    const note = row.querySelector('.m-note').value || '';
-    data.push({ month, amount, note });
-  });
+  for (let m = 1; m <= 12; m++) {
+    const input = document.getElementById('m-amount-' + m);
+    const val = parseFloat(input.value);
+    if (!isNaN(val) && val > 0) {
+      data.push({
+        month: year + '-' + String(m).padStart(2, '0'),
+        amount: val,
+        note: MONTH_NAMES[m-1],
+      });
+    }
+  }
 
-  // Sort by month (标准化后按 YYYY-MM 排序)
-  data.sort((a, b) => compareMonth(a.month, b.month));
+  if (data.length === 0) return alert('请至少输入一个月的收入数据');
+
+  const gapReset = document.getElementById('multi-gap-toggle').checked;
 
   let cumIncome = 0;
   let cumTax = 0;
   let cumDeduction = 0;
   const results = [];
-
-  // Track unique months for deduction (5000/month, only once per month)
   let lastMonth = '';
-  let lastYear = '';
 
   data.forEach(d => {
-    // 跨年重置：新年度累计变量归零重新起算
-    const parts = d.month.split('-');
-    const curYear = parts.length >= 2 ? parts[0] : '';
-    if (curYear && curYear !== lastYear) {
-      if (lastYear !== '') {
-        cumIncome = 0;
-        cumTax = 0;
-        cumDeduction = 0;
-        lastMonth = '';
-      }
-      lastYear = curYear;
-    }
-
-    // 断月重置：开启时，与上一月份间隔 >1 个月则重新起算
+    // 断月重置：与上一有数据的月份间隔 >1 个月则重新起算
     let isGap = false;
-    if (multiGapReset && lastMonth && isGapMonth(lastMonth, d.month)) {
+    if (gapReset && lastMonth && isGapMonth(lastMonth, d.month)) {
       cumIncome = 0;
       cumTax = 0;
       cumDeduction = 0;
@@ -1001,6 +915,17 @@ function calcMulti() {
   renderMultiResults(results);
 }
 
+function resetMulti() {
+  for (let m = 1; m <= 12; m++) {
+    const input = document.getElementById('m-amount-' + m);
+    if (input) {
+      input.value = '';
+      input.parentElement.classList.remove('has-data');
+    }
+  }
+  document.getElementById('multi-result').style.display = 'none';
+}
+
 function renderMultiResults(results) {
   const container = document.getElementById('multi-result');
   container.style.display = '';
@@ -1012,6 +937,56 @@ function renderMultiResults(results) {
   const multiDirLabel = multiDirection === 'forward'
     ? '税前收入 → 税后收入'
     : '税后收入 → 税前收入';
+
+  // 按年分组
+  const yearGroups = {};
+  results.forEach(r => {
+    const yr = r.month.split('-')[0] || '-';
+    if (!yearGroups[yr]) yearGroups[yr] = [];
+    yearGroups[yr].push(r);
+  });
+  const years = Object.keys(yearGroups).sort();
+
+  // 逐行明细（按年分组 + 断月/跨年标记 + 年度小计）
+  let tbodyHTML = '';
+  let seq = 0;
+  years.forEach((yr, yi) => {
+    const yRows = yearGroups[yr];
+    // 跨年分隔
+    if (yi > 0) {
+      tbodyHTML += `<tr style="background:rgba(108,92,231,0.12);"><td colspan="8" style="text-align:center;padding:10px;font-weight:700;color:var(--accent2);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`;
+    }
+    // 年度小计变量
+    let yPre = 0, yTax = 0, yPost = 0;
+    yRows.forEach(r => {
+      seq++;
+      // 断月标记
+      if (r._isGap) {
+        tbodyHTML += `<tr style="background:rgba(253,114,114,0.1);"><td colspan="8" style="text-align:center;padding:8px;font-weight:600;color:var(--red);font-size:12px;">⚠️ 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`;
+      }
+      tbodyHTML += `
+        <tr>
+          <td>${r.month}</td>
+          <td class="label-col">${r.note}</td>
+          <td>¥${formatNum(r.preTax)}</td>
+          <td>¥${formatNum(r.withholdingIncome)}</td>
+          <td>¥${formatNum(r.taxableIncome)}</td>
+          <td>${(r.rate * 100)}%</td>
+          <td class="tax-col">¥${formatNum(r.currentTax)}</td>
+          <td class="highlight">¥${formatNum(r.postTax)}</td>
+        </tr>`;
+      yPre += r.preTax; yTax += r.currentTax; yPost += r.postTax;
+    });
+    // 年度小计
+    if (years.length > 1) {
+      tbodyHTML += `<tr style="background:var(--surface2);font-weight:600;">
+        <td colspan="2" style="text-align:right;color:var(--text2);">${yr} 年小计</td>
+        <td>¥${formatNum(yPre)}</td><td></td><td></td><td></td>
+        <td class="tax-col">¥${formatNum(yTax)}</td>
+        <td class="highlight">¥${formatNum(yPost)}</td>
+      </tr>`;
+    }
+  });
 
   container.innerHTML = `
     <div class="summary-grid">
@@ -1056,32 +1031,7 @@ function renderMultiResults(results) {
             </tr>
           </thead>
           <tbody>
-            ${results.map((r, idx) => {
-              let markers = '';
-              // 跨年标记
-              if (idx > 0) {
-                const prevYear = results[idx-1].month.split('-')[0];
-                const curYear = r.month.split('-')[0];
-                if (curYear !== prevYear) {
-                  markers += `<tr style="background:rgba(108,92,231,0.12);"><td colspan="8" style="text-align:center;padding:10px;font-weight:700;color:var(--accent2);letter-spacing:1px;">── ${curYear} 年度累计重新起算 ──</td></tr>`;
-                }
-              }
-              // 断月标记
-              if (r._isGap) {
-                markers += `<tr style="background:rgba(253,114,114,0.1);"><td colspan="8" style="text-align:center;padding:8px;font-weight:600;color:var(--red);font-size:12px;">⚠️ 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`;
-              }
-              return markers + `
-              <tr>
-                <td>${r.month}</td>
-                <td class="label-col">${r.note}</td>
-                <td>¥${formatNum(r.preTax)}</td>
-                <td>¥${formatNum(r.withholdingIncome)}</td>
-                <td>¥${formatNum(r.taxableIncome)}</td>
-                <td>${(r.rate * 100)}%</td>
-                <td class="tax-col">¥${formatNum(r.currentTax)}</td>
-                <td class="highlight">¥${formatNum(r.postTax)}</td>
-              </tr>`;
-            }).join('')}
+            ${tbodyHTML}
             <tr class="total-row">
               <td colspan="2">合计</td>
               <td>¥${formatNum(totalPre)}</td>
@@ -1111,13 +1061,6 @@ function exportMultiCSV() {
     `${r.month},${r.note},${round2(r.preTax)},${round2(r.withholdingIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(r.postTax)}`
   ).join('\n');
   downloadFile(header + rows, '多月个税计算结果.csv', 'text/csv');
-}
-
-function resetMulti() {
-  document.getElementById('month-list').innerHTML = '';
-  document.getElementById('multi-result').style.display = 'none';
-  monthCounter = 0;
-  addMonth();
 }
 
 // ==================== Batch calc ====================
@@ -1657,7 +1600,7 @@ function showBatchPreview(parsed, personKeys, personsMap, filename) {
             <div class="toggle-hint">开启后，同一人相邻月份中断超过1个月，累计自动归零重新起算</div>
           </div>
           <label class="toggle-switch">
-            <input type="checkbox" checked onchange="batchGapReset=this.checked;">
+            <input type="checkbox" checked onclick="batchGapReset=this.checked;">
             <span class="slider"></span>
           </label>
         </div>
@@ -1987,7 +1930,7 @@ function downloadFile(content, filename, type) {
 }
 
 // Init
-addMonth();
+buildMonthGrid();
 </script>
 </body>
 </html>

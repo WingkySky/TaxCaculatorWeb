@@ -587,6 +587,63 @@
   @media (max-width: 420px) {
     .month-grid { grid-template-columns: repeat(2, 1fr); }
   }
+
+  /* Column Mapping UI */
+  .mapping-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .mapping-col {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    transition: border-color 0.2s;
+  }
+  .mapping-col.selected {
+    border-color: var(--accent);
+    background: rgba(108,92,231,0.08);
+  }
+  .mapping-col .col-idx {
+    font-size: 11px;
+    color: var(--text2);
+    margin-bottom: 4px;
+  }
+  .mapping-col .col-header {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+    word-break: break-all;
+  }
+  .mapping-col select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    color: var(--text);
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+  }
+  .mapping-col select:focus { border-color: var(--accent); }
+  .mapping-col .col-sample {
+    font-size: 11px;
+    color: var(--text2);
+    margin-top: 6px;
+    line-height: 1.5;
+    word-break: break-all;
+  }
+  .mapping-col .col-sample span {
+    display: inline-block;
+    background: var(--bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin: 1px 0;
+  }
 </style>
 </head>
 <body>
@@ -668,6 +725,7 @@
 
       <div class="btn-row">
         <button class="btn btn-secondary" onclick="downloadTemplate()">📥 下载模板</button>
+        <button class="btn btn-secondary" onclick="resetBatch()">🗑️ 清空数据</button>
       </div>
     </div>
 
@@ -1156,17 +1214,11 @@ function onFileParsed() {
   if (_pendingFiles <= 0) {
     _isProcessing = false;
     updateAccumIndicator();
-    // 合并处理所有累积数据（不清空 _accumRows，以便后续继续累加）
     const allRows = _accumRows.slice();
-    // 去除中间出现的重复表头行
-    const headerPattern = /月份|month|收入|income|金额|amount|姓名|name|身份证|电话|phone|手机|银行|bank|卡号/i;
-    const filtered = allRows.filter((row, i) => {
-      if (i === 0) return true;
-      return !row.some(cell => headerPattern.test(cell || ''));
-    });
+    // 智能探测表头
+    const { headerRow, headerRowIndex, dataRows } = smartDetectTable(allRows);
     const label = _accumFileCount > 1 ? `${_accumFileCount} 个文件合并` : '批量数据';
-    processBatch(filtered, label);
-    // 清空 file input 以便重新选择相同文件
+    showColumnMappingUI(allRows, headerRow, headerRowIndex, dataRows, label);
     document.getElementById('file-input').value = '';
   }
 }
@@ -1179,6 +1231,7 @@ function resetBatch() {
   window._batchParsed = null;
   window._batchFilename = null;
   window._batchResults = null;
+  window._colMappingState = null;
   document.getElementById('batch-preview').style.display = 'none';
   document.getElementById('batch-result').style.display = 'none';
   document.getElementById('file-input').value = '';
@@ -1301,6 +1354,317 @@ function compareMonth(a, b) {
   if (a === '-') return 1;
   if (b === '-') return -1;
   return a.localeCompare(b);
+}
+
+// ==================== Smart Table Detection ====================
+
+const COL_KEYWORDS = {
+  name:    /姓名|户名|名称|人员|name|person/i,
+  month:   /月份|month|期间|时间|日期|date|发放月/i,
+  amount:  /金额|amount|收入|income|报酬|pay|发放|实发|税前|应发|计划|费用|工资|薪资/i,
+  idCard:  /身份证|id\s*card|idcard|证件号/i,
+  phone:   /电话|phone|手机|mobile|联系/i,
+  bankCard:/银行|bank|卡号|bankcard|账号|开户/i,
+  note:    /备注|note|说明|remark|类型|方式|承担|服务费/i,
+};
+
+const COL_TYPE_LABELS = {
+  '':        '— 不识别 —',
+  name:      '👤 姓名',
+  month:     '📅 月份',
+  amount:    '💰 金额',
+  idCard:    '🪪 身份证',
+  phone:     '📱 电话',
+  bankCard:  '💳 银行卡',
+  note:      '📝 备注',
+};
+
+/**
+ * 智能探测数据表：扫描前20行找到关键词最密集的行作为表头
+ */
+function smartDetectTable(rows) {
+  const SUMMARY_RE = /合计|总计|汇总|小计|total|sum/i;
+  let bestIdx = 0, bestScore = 0;
+  const scanEnd = Math.min(rows.length, 25);
+
+  for (let i = 0; i < scanEnd; i++) {
+    const row = rows[i] || [];
+    let score = 0;
+    row.forEach(cell => {
+      const v = String(cell || '');
+      if (!v.trim()) return;
+      Object.values(COL_KEYWORDS).forEach(re => { if (re.test(v)) score++; });
+      if (/序号|编号|^#$/.test(v)) score += 0.5;
+    });
+    if (score > bestScore) { bestScore = score; bestIdx = i; }
+  }
+
+  const headerRow = rows[bestIdx] || [];
+  const dataRows = [];
+  for (let i = bestIdx + 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const firstCell = String(row[0] || '') + String(row[1] || '');
+    if (SUMMARY_RE.test(firstCell)) continue;
+    if (row.some(c => c != null && String(c).trim() !== '')) dataRows.push(row);
+  }
+  return { headerRow, headerRowIndex: bestIdx, dataRows };
+}
+
+/**
+ * 自动推断列映射 + 构建映射UI数据
+ */
+function detectColumnMapping(headerRow, dataRows) {
+  const mapping = {};
+  const used = new Set();
+
+  headerRow.forEach((cell, i) => {
+    const v = String(cell || '').trim();
+    if (!v) return;
+    for (const [type, re] of Object.entries(COL_KEYWORDS)) {
+      if (!used.has(type) && re.test(v)) {
+        mapping[i] = type;
+        used.add(type);
+        break;
+      }
+    }
+  });
+
+  // 如果没识别到金额列，扫描数据找纯数值列
+  if (!used.has('amount')) {
+    for (let ci = 0; ci < headerRow.length; ci++) {
+      if (mapping[ci]) continue;
+      let numCount = 0;
+      for (let ri = 0; ri < Math.min(dataRows.length, 10); ri++) {
+        const v = parseFloat(String(dataRows[ri]?.[ci] || '').replace(/,/g, ''));
+        if (!isNaN(v) && v > 0) numCount++;
+      }
+      if (numCount >= Math.min(dataRows.length, 10) * 0.5) {
+        mapping[ci] = 'amount';
+        used.add('amount');
+        break;
+      }
+    }
+  }
+
+  const cols = {};
+  headerRow.forEach((cell, i) => {
+    const v = String(cell || '').trim();
+    if (!v && mapping[i] == null) return;
+    const samples = [];
+    for (let ri = 0; ri < Math.min(dataRows.length, 3); ri++) {
+      const sv = dataRows[ri]?.[i];
+      if (sv != null && String(sv).trim()) samples.push(String(sv).trim());
+    }
+    cols[i] = { header: v || `列${i+1}`, type: mapping[i] || '', samples };
+  });
+
+  return { cols, amountType: 'preTax' };
+}
+
+/**
+ * 显示列映射确认UI
+ */
+function showColumnMappingUI(rawRows, headerRow, headerRowIndex, dataRows, filename) {
+  const container = document.getElementById('batch-preview');
+  const resultBox = document.getElementById('batch-result');
+  resultBox.style.display = 'none';
+  container.style.display = '';
+
+  const autoMap = detectColumnMapping(headerRow, dataRows);
+  window._colMappingState = { rawRows, headerRow, headerRowIndex, dataRows, filename, mapping: autoMap };
+
+  // 统计
+  const totalDataRows = dataRows.length;
+  const sampleCount = Math.min(dataRows.length, 5);
+  const skippedRows = headerRowIndex;
+
+  // 构建列映射卡片
+  let colsHTML = '';
+  const colIndices = Object.keys(autoMap.cols).map(Number).sort((a, b) => a - b);
+  colIndices.forEach(ci => {
+    const col = autoMap.cols[ci];
+    const isSelected = col.type !== '';
+    colsHTML += `
+      <div class="mapping-col ${isSelected ? 'selected' : ''}">
+        <div class="col-idx">第 ${ci + 1} 列</div>
+        <div class="col-header">${col.header}</div>
+        <select data-col="${ci}" onchange="onMappingChange(this)">
+          ${Object.entries(COL_TYPE_LABELS).map(([k, v]) =>
+            `<option value="${k}" ${k === col.type ? 'selected' : ''}>${v}</option>`
+          ).join('')}
+        </select>
+        <div class="col-sample">${col.samples.map(s => `<span>${s.length > 15 ? s.slice(0,15)+'…' : s}</span>`).join(' ')}</div>
+      </div>`;
+  });
+
+  // 构建原始数据预览
+  let previewRowsHTML = '';
+  for (let ri = 0; ri < sampleCount; ri++) {
+    const row = dataRows[ri] || [];
+    previewRowsHTML += '<tr>';
+    colIndices.forEach(ci => {
+      const v = String(row[ci] || '');
+      previewRowsHTML += `<td style="font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${v || '<span style="color:var(--text2);opacity:0.4;">—</span>'}</td>`;
+    });
+    previewRowsHTML += '</tr>';
+  }
+  if (dataRows.length > sampleCount) {
+    previewRowsHTML += `<tr><td colspan="${colIndices.length}" style="text-align:center;color:var(--text2);font-size:12px;padding:8px;">… 还有 ${dataRows.length - sampleCount} 行</td></tr>`;
+  }
+
+  let previewHeadHTML = '';
+  colIndices.forEach(ci => {
+    previewHeadHTML += `<th style="font-size:11px;white-space:nowrap;">${autoMap.cols[ci].header}</th>`;
+  });
+
+  container.innerHTML = `
+    <div class="card" style="border-color:var(--accent);border-width:1px;">
+      <div class="card-title">
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span class="icon" style="background:rgba(108,92,231,0.15);">🔍</span>
+          智能识别 — ${filename}
+        </span>
+        <span class="badge">自动检测</span>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+        <div style="background:var(--surface2);padding:8px 14px;border-radius:8px;font-size:13px;">
+          📊 发现 <strong style="color:var(--accent2);">${totalDataRows}</strong> 行数据
+        </div>
+        <div style="background:var(--surface2);padding:8px 14px;border-radius:8px;font-size:13px;">
+          📋 识别到 <strong style="color:var(--accent2);">${colIndices.length}</strong> 列
+        </div>
+        ${skippedRows > 0 ? `<div style="background:var(--surface2);padding:8px 14px;border-radius:8px;font-size:13px;">⏭️ 跳过前 ${skippedRows} 行头部信息</div>` : ''}
+      </div>
+
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--text);">📋 列映射 — 请确认或修改每列的用途</div>
+      <div class="mapping-grid">${colsHTML}</div>
+
+      <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border);margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text);">💰 金额类型</div>
+        <div style="display:flex;gap:16px;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text);">
+            <input type="radio" name="amount-type" value="preTax" checked style="accent-color:var(--accent);"> 税前收入（将用累计预扣法计算个税）
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text);">
+            <input type="radio" name="amount-type" value="postTax" style="accent-color:var(--accent);"> 税后收入（将反算税前金额）
+          </label>
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;">📋 原始数据预览（前 ${sampleCount} 行）</div>
+        <div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">
+          <table class="result-table" style="font-size:12px;">
+            <thead><tr>${previewHeadHTML}</tr></thead>
+            <tbody>${previewRowsHTML}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;">
+        <button class="btn btn-primary" style="flex:1;padding:12px;font-size:15px;" onclick="confirmColumnMapping()">✅ 确认映射并计算</button>
+        <button class="btn btn-secondary" style="padding:12px;" onclick="resetBatch()">🔄 重新上传</button>
+      </div>
+    </div>
+  `;
+}
+
+function onMappingChange(sel) {
+  const ci = sel.dataset.col;
+  const type = sel.value;
+  const state = window._colMappingState;
+  if (state) state.mapping.cols[ci].type = type;
+  const card = sel.parentElement;
+  if (type) {
+    card.classList.add('selected');
+  } else {
+    card.classList.remove('selected');
+  }
+}
+
+function confirmColumnMapping() {
+  const state = window._colMappingState;
+  if (!state) return;
+
+  // 构建列映射
+  const colMap = {};
+  Object.entries(state.mapping.cols).forEach(([ci, col]) => {
+    if (col.type) colMap[col.type] = parseInt(ci);
+  });
+
+  if (colMap.amount == null) return alert('请至少映射一个「金额」列');
+
+  // 金额类型
+  const amountTypeRadio = document.querySelector('input[name="amount-type"]:checked');
+  const amountType = amountTypeRadio ? amountTypeRadio.value : 'preTax';
+  batchDirection = amountType === 'postTax' ? 'reverse' : 'forward';
+
+  // 解析并展示预览
+  processWithMapping(state.dataRows, colMap, state.filename);
+}
+
+/**
+ * 用确认的列映射解析数据 → 展示预览
+ */
+function processWithMapping(dataRows, colMap, filename) {
+  window._batchParsed = null;
+  window._batchFilename = null;
+  window._batchResults = null;
+  document.getElementById('batch-result').style.display = 'none';
+
+  const parsed = [];
+  dataRows.forEach(row => {
+    let month = '', amount = 0, name = '默认', idCard = '', phone = '', bankCard = '';
+
+    if (colMap.name != null) name = String(row[colMap.name] || '').trim();
+    if (colMap.month != null) month = normalizeMonth(String(row[colMap.month] || ''));
+    if (colMap.amount != null) amount = parseAmount(String(row[colMap.amount] || ''));
+    if (colMap.idCard != null) idCard = String(row[colMap.idCard] || '').trim().toUpperCase();
+    if (colMap.phone != null) phone = String(row[colMap.phone] || '').trim();
+    if (colMap.bankCard != null) bankCard = String(row[colMap.bankCard] || '').trim();
+
+    if (!name) name = '默认';
+
+    let personKey = '';
+    if (idCard) {
+      personKey = 'ID:' + idCard;
+    } else {
+      const parts = [];
+      if (name && name !== '默认') parts.push('N:' + name);
+      if (phone) parts.push('P:' + phone);
+      if (bankCard) parts.push('B:' + bankCard);
+      personKey = parts.length > 0 ? parts.join('|') : '默认';
+    }
+
+    if (amount > 0) {
+      parsed.push({ month: month || '-', amount, person: name, idCard, phone, bankCard, personKey });
+    }
+  });
+
+  // 按人分组
+  const personsMap = {};
+  parsed.forEach(d => {
+    if (!personsMap[d.personKey]) {
+      personsMap[d.personKey] = { name: d.person, idCard: d.idCard, phone: d.phone, bankCard: d.bankCard, records: [] };
+    }
+    const g = personsMap[d.personKey];
+    if (d.idCard && d.idCard.length > g.idCard.length) g.idCard = d.idCard;
+    if (d.phone && d.phone.length > g.phone.length) g.phone = d.phone;
+    if (d.bankCard && d.bankCard.length > g.bankCard.length) g.bankCard = d.bankCard;
+    if (d.person && d.person !== '默认' && (!g.name || g.name === '默认')) g.name = d.person;
+    g.records.push(d);
+  });
+
+  const personKeys = Object.keys(personsMap).sort((a, b) => {
+    const na = personsMap[a].name || a;
+    const nb = personsMap[b].name || b;
+    return na.localeCompare(nb);
+  });
+
+  window._batchParsed = { parsed, personKeys, personsMap };
+  window._batchFilename = filename;
+  showBatchPreview(parsed, personKeys, personsMap, filename);
 }
 
 function processBatch(rows, filename) {

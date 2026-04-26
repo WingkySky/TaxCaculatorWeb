@@ -1142,6 +1142,7 @@ let _pendingFiles = 0;
 let _accumRows = [];
 let _accumFileCount = 0;   // 已累加的文件数
 let _isProcessing = false;  // 是否正在处理文件中
+let _accumSources = [];
 
 function handleFiles(fileList) {
   // 不再清空 _accumRows，实现分批累加
@@ -1156,8 +1157,9 @@ function handleFiles(fileList) {
 function updateAccumIndicator() {
   const el = document.getElementById('accum-indicator');
   if (_accumFileCount > 0) {
+    const selectedSources = _accumSources.filter(s => s.selected);
     el.style.display = '';
-    el.textContent = `📂 已累加 ${_accumFileCount} 个文件（${_accumRows.length} 行数据），可继续上传更多文件`;
+    el.textContent = `📂 已累加 ${_accumFileCount} 个文件（${selectedSources.length} 个已选数据表，${_accumRows.length} 行数据），可继续上传更多文件`;
   } else {
     el.style.display = 'none';
   }
@@ -1172,12 +1174,22 @@ function processFile(file) {
       if (isGarbled(text)) {
         const reader2 = new FileReader();
         reader2.onload = e2 => {
-          _accumRows.push(...parseCSV(e2.target.result));
+          _accumSources.push(buildSourceItem({
+            type: 'csv',
+            fileName: file.name,
+            rows: parseCSV(e2.target.result),
+            selected: true
+          }));
           onFileParsed();
         };
         reader2.readAsText(file, 'gbk');
       } else {
-        _accumRows.push(...parseCSV(text));
+        _accumSources.push(buildSourceItem({
+          type: 'csv',
+          fileName: file.name,
+          rows: parseCSV(text),
+          selected: true
+        }));
         onFileParsed();
       }
     };
@@ -1201,9 +1213,8 @@ function readExcel(file) {
   const reader = new FileReader();
   reader.onload = e => {
     const wb = XLSX.read(e.target.result, { type: 'array' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
-    _accumRows.push(...rows);
+    const sheetItems = analyzeWorkbookSheets(wb, file.name);
+    sheetItems.forEach(item => _accumSources.push(item));
     onFileParsed();
   };
   reader.readAsArrayBuffer(file);
@@ -1213,19 +1224,79 @@ function onFileParsed() {
   _pendingFiles--;
   if (_pendingFiles <= 0) {
     _isProcessing = false;
-    updateAccumIndicator();
-    const allRows = _accumRows.slice();
-    // 智能探测表头
-    const { headerRow, headerRowIndex, dataRows } = smartDetectTable(allRows);
-    const label = _accumFileCount > 1 ? `${_accumFileCount} 个文件合并` : '批量数据';
-    showColumnMappingUI(allRows, headerRow, headerRowIndex, dataRows, label);
+    refreshBatchPreview();
     document.getElementById('file-input').value = '';
   }
+}
+
+function buildSourceItem({ type, fileName, sheetName = '', rows = [], selected = true, analysis = null }) {
+  return {
+    id: `${type}:${fileName}:${sheetName || 'default'}:${Math.random().toString(36).slice(2, 8)}`,
+    type,
+    fileName,
+    sheetName,
+    rows,
+    selected,
+    analysis
+  };
+}
+
+function refreshBatchPreview() {
+  _accumRows = collectSelectedRows();
+  updateAccumIndicator();
+
+  const container = document.getElementById('batch-preview');
+  const resultBox = document.getElementById('batch-result');
+  resultBox.style.display = 'none';
+
+  if (_accumRows.length === 0) {
+    const sourceHTML = renderSourceSelectionHTML(_accumSources);
+    container.style.display = '';
+    container.innerHTML = `
+      <div class="card" style="border-color:var(--border);">
+        <div class="card-title"><span class="icon" style="background:rgba(253,114,114,0.12);">⚠️</span> 未选择可导入的数据表</div>
+        <div style="font-size:14px;color:var(--text2);">请至少勾选一个包含有效数据的 CSV 或 Sheet。</div>
+        ${sourceHTML}
+      </div>
+    `;
+    return;
+  }
+
+  const { headerRow, headerRowIndex, dataRows } = smartDetectTable(_accumRows);
+  const label = buildBatchSourceLabel();
+  showColumnMappingUI(_accumRows, headerRow, headerRowIndex, dataRows, label, _accumSources);
+}
+
+function collectSelectedRows() {
+  const rows = [];
+  _accumSources.filter(s => s.selected).forEach(source => {
+    source.rows.forEach((row, idx) => {
+      const tagged = Array.isArray(row) ? row.slice() : [row];
+      tagged._sourceId = source.id;
+      tagged._sheetName = source.sheetName || '';
+      tagged._fileName = source.fileName || '';
+      tagged._sheetMonthHint = source.analysis?.monthHint || '';
+      tagged._sourceRowIndex = idx;
+      rows.push(tagged);
+    });
+  });
+  return rows;
+}
+
+function buildBatchSourceLabel() {
+  const selectedSources = _accumSources.filter(s => s.selected);
+  const fileCount = new Set(selectedSources.map(s => s.fileName)).size;
+  const sheetCount = selectedSources.filter(s => s.type === 'excel-sheet').length;
+  if (sheetCount > 0) {
+    return `${fileCount} 个文件 / ${selectedSources.length} 个数据表`;
+  }
+  return fileCount > 1 ? `${fileCount} 个文件合并` : (selectedSources[0]?.fileName || '批量数据');
 }
 
 function resetBatch() {
   _pendingFiles = 0;
   _accumRows = [];
+  _accumSources = [];
   _accumFileCount = 0;
   _isProcessing = false;
   window._batchParsed = null;
@@ -1235,6 +1306,7 @@ function resetBatch() {
   document.getElementById('batch-preview').style.display = 'none';
   document.getElementById('batch-result').style.display = 'none';
   document.getElementById('file-input').value = '';
+  updateAccumIndicator();
   batchDirection = 'forward';
   batchGapReset = true;
 }
@@ -1356,6 +1428,165 @@ function compareMonth(a, b) {
   return a.localeCompare(b);
 }
 
+function extractMonthHint(text) {
+  if (!text) return '';
+  const raw = String(text).trim();
+  const patterns = [
+    /(\d{4}\s*年\s*\d{1,2}\s*月)/,
+    /(\d{4}[-\/.]\d{1,2})/,
+    /(\d{6})/
+  ];
+  for (const re of patterns) {
+    const m = raw.match(re);
+    if (!m) continue;
+    const normalized = normalizeMonth(m[1]);
+    if (/^\d{4}-\d{2}$/.test(normalized)) return normalized;
+  }
+  return '';
+}
+
+function getSheetNameScore(sheetName) {
+  const name = String(sheetName || '');
+  let score = 0;
+  if (/(工资|薪资|报酬|劳务|个税|结算|收入|明细|台账|salary|pay|income|detail)/i.test(name)) score += 8;
+  if (/(汇总|总表|合计|说明|模板|示例|图表|透视|pivot|summary|chart|cover|封面|备份|backup)/i.test(name)) score -= 12;
+  if (extractMonthHint(name)) score += 6;
+  return score;
+}
+
+function scoreDataCoverage(headerRow, dataRows, autoMap) {
+  const sampleRows = dataRows.slice(0, 50);
+  if (!sampleRows.length) return { score: 0, amountRate: 0, monthRate: 0, identityRate: 0 };
+
+  let amountHits = 0;
+  let monthHits = 0;
+  let identityHits = 0;
+
+  sampleRows.forEach(row => {
+    const amountVal = autoMap.cols && autoMap.cols[autoMap.amountCol ?? -1] ? row[autoMap.amountCol] : '';
+    const monthVal = autoMap.cols && autoMap.cols[autoMap.monthCol ?? -1] ? row[autoMap.monthCol] : '';
+    const idVal = autoMap.cols && autoMap.cols[autoMap.idCardCol ?? -1] ? row[autoMap.idCardCol] : '';
+    const phoneVal = autoMap.cols && autoMap.cols[autoMap.phoneCol ?? -1] ? row[autoMap.phoneCol] : '';
+    const bankVal = autoMap.cols && autoMap.cols[autoMap.bankCardCol ?? -1] ? row[autoMap.bankCardCol] : '';
+    const nameVal = autoMap.cols && autoMap.cols[autoMap.nameCol ?? -1] ? row[autoMap.nameCol] : '';
+
+    if (parseAmount(amountVal) > 0) amountHits++;
+
+    const normalizedMonth = normalizeMonth(monthVal || '');
+    if (/^\d{4}-\d{2}$/.test(normalizedMonth)) monthHits++;
+
+    if (
+      /^\d{17}[\dXx]$/.test(String(idVal || '').trim()) ||
+      /^1[3-9]\d{9}$/.test(String(phoneVal || '').trim()) ||
+      /^\d{16,19}$/.test(String(bankVal || '').trim()) ||
+      String(nameVal || '').trim()
+    ) {
+      identityHits++;
+    }
+  });
+
+  const amountRate = amountHits / sampleRows.length;
+  const monthRate = monthHits / sampleRows.length;
+  const identityRate = identityHits / sampleRows.length;
+  let score = 0;
+  if (sampleRows.length >= 3) score += 8;
+  if (sampleRows.length >= 10) score += 4;
+  score += Math.round(amountRate * 18);
+  score += Math.round(monthRate * 14);
+  score += Math.round(identityRate * 12);
+
+  return { score, amountRate, monthRate, identityRate };
+}
+
+function analyzeSheet(sheetName, rows) {
+  const nonEmptyRows = (rows || []).filter(row => row.some(cell => String(cell || '').trim() !== ''));
+  if (!nonEmptyRows.length) {
+    return {
+      sheetName,
+      rows: [],
+      score: -999,
+      monthHint: extractMonthHint(sheetName),
+      dataRowsCount: 0,
+      headerRowIndex: 0,
+      autoMap: { cols: {}, amountType: 'preTax' }
+    };
+  }
+
+  const { headerRow, headerRowIndex, dataRows } = smartDetectTable(nonEmptyRows);
+  const autoMap = detectColumnMapping(headerRow, dataRows);
+
+  let headerScore = 0;
+  const typedCols = Object.entries(autoMap.cols || {}).filter(([, col]) => col.type);
+  typedCols.forEach(([, col]) => {
+    if (col.type === 'amount') headerScore += 25;
+    else if (col.type === 'month') headerScore += 18;
+    else headerScore += 10;
+  });
+
+  const reverseMap = {};
+  Object.entries(autoMap.cols || {}).forEach(([ci, col]) => {
+    if (col.type && reverseMap[col.type] == null) reverseMap[col.type] = Number(ci);
+  });
+  autoMap.amountCol = reverseMap.amount;
+  autoMap.monthCol = reverseMap.month;
+  autoMap.nameCol = reverseMap.name;
+  autoMap.idCardCol = reverseMap.idCard;
+  autoMap.phoneCol = reverseMap.phone;
+  autoMap.bankCardCol = reverseMap.bankCard;
+
+  const coverage = scoreDataCoverage(headerRow, dataRows, autoMap);
+  const nameScore = getSheetNameScore(sheetName);
+  const monthHint = extractMonthHint(sheetName);
+  const score = headerScore + coverage.score + nameScore + (monthHint ? 4 : 0);
+
+  return {
+    sheetName,
+    rows: nonEmptyRows,
+    score,
+    headerScore,
+    dataScore: coverage.score,
+    nameScore,
+    monthHint,
+    dataRowsCount: dataRows.length,
+    headerRowIndex,
+    autoMap,
+    amountRate: coverage.amountRate,
+    monthRate: coverage.monthRate,
+    identityRate: coverage.identityRate
+  };
+}
+
+function analyzeWorkbookSheets(wb, fileName) {
+  const analyzed = wb.SheetNames.map(sheetName => {
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+    return analyzeSheet(sheetName, rows);
+  }).filter(item => item.rows.length > 0);
+
+  if (!analyzed.length) return [];
+
+  analyzed.sort((a, b) => b.score - a.score);
+  const topScore = analyzed[0].score;
+  let selected = analyzed.filter(item =>
+    item.score >= 45 &&
+    item.dataRowsCount >= 2 &&
+    item.score >= topScore - 10 &&
+    !/(汇总|总表|说明|模板|图表|透视|summary|chart|cover|封面)/i.test(item.sheetName)
+  );
+
+  if (!selected.length) selected = [analyzed[0]];
+  const selectedNames = new Set(selected.map(item => item.sheetName));
+
+  return analyzed.map(item => buildSourceItem({
+    type: 'excel-sheet',
+    fileName,
+    sheetName: item.sheetName,
+    rows: item.rows,
+    selected: selectedNames.has(item.sheetName),
+    analysis: item
+  }));
+}
+
 // ==================== Smart Table Detection ====================
 
 const COL_KEYWORDS = {
@@ -1384,6 +1615,7 @@ const COL_TYPE_LABELS = {
  */
 function smartDetectTable(rows) {
   const SUMMARY_RE = /合计|总计|汇总|小计|total|sum/i;
+  const HEADER_RE = /月份|month|时间|日期|date|收入|income|金额|amount|姓名|name|身份证|电话|phone|手机|银行|bank|卡号/i;
   let bestIdx = 0, bestScore = 0;
   const scanEnd = Math.min(rows.length, 25);
 
@@ -1405,6 +1637,8 @@ function smartDetectTable(rows) {
     const row = rows[i] || [];
     const firstCell = String(row[0] || '') + String(row[1] || '');
     if (SUMMARY_RE.test(firstCell)) continue;
+    const keywordHits = row.filter(cell => HEADER_RE.test(String(cell || ''))).length;
+    if (keywordHits >= 2) continue;
     if (row.some(c => c != null && String(c).trim() !== '')) dataRows.push(row);
   }
   return { headerRow, headerRowIndex: bestIdx, dataRows };
@@ -1464,14 +1698,14 @@ function detectColumnMapping(headerRow, dataRows) {
 /**
  * 显示列映射确认UI
  */
-function showColumnMappingUI(rawRows, headerRow, headerRowIndex, dataRows, filename) {
+function showColumnMappingUI(rawRows, headerRow, headerRowIndex, dataRows, filename, sourceItems = []) {
   const container = document.getElementById('batch-preview');
   const resultBox = document.getElementById('batch-result');
   resultBox.style.display = 'none';
   container.style.display = '';
 
   const autoMap = detectColumnMapping(headerRow, dataRows);
-  window._colMappingState = { rawRows, headerRow, headerRowIndex, dataRows, filename, mapping: autoMap };
+  window._colMappingState = { rawRows, headerRow, headerRowIndex, dataRows, filename, mapping: autoMap, sourceItems };
 
   // 统计
   const totalDataRows = dataRows.length;
@@ -1517,6 +1751,8 @@ function showColumnMappingUI(rawRows, headerRow, headerRowIndex, dataRows, filen
     previewHeadHTML += `<th style="font-size:11px;white-space:nowrap;">${autoMap.cols[ci].header}</th>`;
   });
 
+  const sourceHTML = renderSourceSelectionHTML(sourceItems);
+
   container.innerHTML = `
     <div class="card" style="border-color:var(--accent);border-width:1px;">
       <div class="card-title">
@@ -1536,6 +1772,8 @@ function showColumnMappingUI(rawRows, headerRow, headerRowIndex, dataRows, filen
         </div>
         ${skippedRows > 0 ? `<div style="background:var(--surface2);padding:8px 14px;border-radius:8px;font-size:13px;">⏭️ 跳过前 ${skippedRows} 行头部信息</div>` : ''}
       </div>
+
+      ${sourceHTML}
 
       <div style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--text);">📋 列映射 — 请确认或修改每列的用途</div>
       <div class="mapping-grid">${colsHTML}</div>
@@ -1570,6 +1808,50 @@ function showColumnMappingUI(rawRows, headerRow, headerRowIndex, dataRows, filen
   `;
 }
 
+function renderSourceSelectionHTML(sourceItems) {
+  if (!sourceItems || sourceItems.length <= 1) return '';
+
+  const selectedCount = sourceItems.filter(item => item.selected).length;
+  const rowsCount = sourceItems.filter(item => item.selected).reduce((sum, item) => sum + item.rows.length, 0);
+  const cards = sourceItems.map(item => {
+    const analysis = item.analysis || {};
+    const score = typeof analysis.score === 'number' ? Math.max(0, Math.round(analysis.score)) : null;
+    const monthHint = analysis.monthHint ? ` · 月份提示 ${analysis.monthHint}` : '';
+    const desc = item.type === 'excel-sheet'
+      ? `${item.fileName} / ${item.sheetName || 'Sheet'}`
+      : item.fileName;
+    return `
+      <label style="display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid ${item.selected ? 'var(--accent)' : 'var(--border)'};border-radius:8px;background:${item.selected ? 'rgba(108,92,231,0.08)' : 'var(--surface2)'};cursor:pointer;">
+        <input type="checkbox" ${item.selected ? 'checked' : ''} onchange="toggleBatchSource(${JSON.stringify(item.id)}, this.checked)" style="margin-top:2px;accent-color:var(--accent);">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;color:var(--text);word-break:break-word;">${desc}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px;">
+            ${score != null ? `评分 ${score} 分 · ` : ''}${analysis.dataRowsCount || item.rows.length} 行${monthHint}
+          </div>
+        </div>
+      </label>
+    `;
+  }).join('');
+
+  return `
+    <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border);margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+        <div style="font-size:13px;font-weight:600;color:var(--text);">🗂️ 数据表选择</div>
+        <div style="font-size:12px;color:var(--text2);">已选 ${selectedCount} 个数据表，合计 ${rowsCount} 行</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">${cards}</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:10px;">系统会优先勾选最像明细数据的 Sheet；如果某个页只是汇总、模板或说明，可以取消勾选。</div>
+    </div>
+  `;
+}
+
+function toggleBatchSource(sourceId, checked) {
+  const target = _accumSources.find(item => item.id === sourceId);
+  if (!target) return;
+  target.selected = checked;
+  refreshBatchPreview();
+}
+
 function onMappingChange(sel) {
   const ci = sel.dataset.col;
   const type = sel.value;
@@ -1601,13 +1883,13 @@ function confirmColumnMapping() {
   batchDirection = amountType === 'postTax' ? 'reverse' : 'forward';
 
   // 解析并展示预览
-  processWithMapping(state.dataRows, colMap, state.filename);
+  processWithMapping(state.dataRows, colMap, state.filename, state.sourceItems);
 }
 
 /**
  * 用确认的列映射解析数据 → 展示预览
  */
-function processWithMapping(dataRows, colMap, filename) {
+function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
   window._batchParsed = null;
   window._batchFilename = null;
   window._batchResults = null;
@@ -1623,6 +1905,7 @@ function processWithMapping(dataRows, colMap, filename) {
     if (colMap.idCard != null) idCard = String(row[colMap.idCard] || '').trim().toUpperCase();
     if (colMap.phone != null) phone = String(row[colMap.phone] || '').trim();
     if (colMap.bankCard != null) bankCard = String(row[colMap.bankCard] || '').trim();
+    if ((!month || month === '-') && row._sheetMonthHint) month = row._sheetMonthHint;
 
     if (!name) name = '默认';
 
@@ -1638,7 +1921,17 @@ function processWithMapping(dataRows, colMap, filename) {
     }
 
     if (amount > 0) {
-      parsed.push({ month: month || '-', amount, person: name, idCard, phone, bankCard, personKey });
+      parsed.push({
+        month: month || '-',
+        amount,
+        person: name,
+        idCard,
+        phone,
+        bankCard,
+        personKey,
+        sourceSheet: row._sheetName || '',
+        sourceFile: row._fileName || ''
+      });
     }
   });
 
@@ -1662,7 +1955,7 @@ function processWithMapping(dataRows, colMap, filename) {
     return na.localeCompare(nb);
   });
 
-  window._batchParsed = { parsed, personKeys, personsMap };
+  window._batchParsed = { parsed, personKeys, personsMap, sourceItems };
   window._batchFilename = filename;
   showBatchPreview(parsed, personKeys, personsMap, filename);
 }

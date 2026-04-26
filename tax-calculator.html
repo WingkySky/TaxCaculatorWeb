@@ -1568,6 +1568,26 @@ function rowHasUsableIdentity({ name, idCard, phone, bankCard }) {
   return !!((cleanName && cleanName !== '默认') || sanitizeIdCard(idCard) || sanitizePhone(phone) || sanitizeBankCard(bankCard));
 }
 
+function isSummaryLikeText(value) {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  return /合计|总计|汇总|小计|平台服务费|服务费率|服务费|开票金额|客户支付合计|收费通知/i.test(text);
+}
+
+function isSummaryLikeRow(row) {
+  if (!Array.isArray(row)) return false;
+  const cells = row.map(cell => String(cell || '').trim()).filter(Boolean);
+  if (!cells.length) return false;
+  const summaryHits = cells.filter(isSummaryLikeText).length;
+  if (!summaryHits) return false;
+
+  const hasIdentity = cells.some(cell =>
+    sanitizeIdCard(cell) || sanitizePhone(cell) || sanitizeBankCard(cell) || (!!sanitizeName(cell) && !isSummaryLikeText(cell))
+  );
+
+  return !hasIdentity;
+}
+
 function isAmountLikeNumber(value) {
   const raw = String(value == null ? '' : value).trim();
   if (!raw) return false;
@@ -1818,6 +1838,7 @@ function smartDetectTable(rows) {
     const row = rows[i] || [];
     const firstCell = String(row[0] || '') + String(row[1] || '');
     if (SUMMARY_RE.test(firstCell)) continue;
+    if (isSummaryLikeRow(row)) continue;
     const keywordHits = row.filter(cell => HEADER_RE.test(String(cell || ''))).length;
     if (keywordHits >= 2) continue;
     if (row.some(c => c != null && String(c).trim() !== '')) dataRows.push(row);
@@ -2021,7 +2042,7 @@ function renderSourceSelectionHTML(sourceItems) {
     return `
       <div style="padding:12px;border:1px solid ${isPreview ? 'var(--blue)' : (item.selected ? 'var(--accent)' : 'var(--border)')};border-radius:8px;background:${isPreview ? 'rgba(116,185,255,0.08)' : (item.selected ? 'rgba(108,92,231,0.08)' : 'var(--surface2)')};">
         <div style="display:flex;gap:10px;align-items:flex-start;">
-          <input type="checkbox" ${item.selected ? 'checked' : ''} onchange="toggleBatchSource(${JSON.stringify(item.id)}, this.checked)" style="margin-top:2px;accent-color:var(--accent);">
+          <input type="checkbox" ${item.selected ? 'checked' : ''} onchange='toggleBatchSource(${JSON.stringify(item.id)}, this.checked)' style="margin-top:2px;accent-color:var(--accent);">
           <div style="flex:1;min-width:0;">
             <div style="font-size:13px;font-weight:600;color:var(--text);word-break:break-word;">${desc}</div>
             <div style="font-size:12px;color:var(--text2);margin-top:4px;">
@@ -2030,8 +2051,8 @@ function renderSourceSelectionHTML(sourceItems) {
           </div>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-          <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:12px;${isPreview ? 'border-color:var(--blue);color:var(--blue);' : ''}" onclick="setPreviewSource(${JSON.stringify(item.id)})">${isPreview ? '已在预览' : '预览此表'}</button>
-          <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:12px;" onclick="selectOnlySource(${JSON.stringify(item.id)})">仅用此表</button>
+          <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:12px;${isPreview ? 'border-color:var(--blue);color:var(--blue);' : ''}" onclick='setPreviewSource(${JSON.stringify(item.id)})'>${isPreview ? '已在预览' : '预览此表'}</button>
+          <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:12px;" onclick='selectOnlySource(${JSON.stringify(item.id)})'>仅用此表</button>
         </div>
       </div>
     `;
@@ -2124,6 +2145,7 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
 
   const parsed = [];
   dataRows.forEach(row => {
+    if (isSummaryLikeRow(row)) return;
     let month = '', amount = 0, name = '默认', idCard = '', phone = '', bankCard = '';
     const monthHint = row._sheetMonthHint || '';
 
@@ -2248,6 +2270,7 @@ function processBatch(rows, filename) {
   // 第一步：解析所有行
   const parsed = [];
   dataRows.forEach(row => {
+    if (isSummaryLikeRow(row)) return;
     const allCols = row; // 保留所有列（含空列），按索引取值
     let month = '', amount = 0, name = '默认', idCard = '', phone = '', bankCard = '';
 

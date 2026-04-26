@@ -1273,15 +1273,7 @@ function refreshBatchPreview() {
 function collectSelectedRows() {
   const rows = [];
   _accumSources.filter(s => s.selected).forEach(source => {
-    source.rows.forEach((row, idx) => {
-      const tagged = Array.isArray(row) ? row.slice() : [row];
-      tagged._sourceId = source.id;
-      tagged._sheetName = source.sheetName || '';
-      tagged._fileName = source.fileName || '';
-      tagged._sheetMonthHint = source.analysis?.monthHint || '';
-      tagged._sourceRowIndex = idx;
-      rows.push(tagged);
-    });
+    rows.push(...tagSourceRows(source));
   });
   return rows;
 }
@@ -1297,12 +1289,18 @@ function collectPreviewRows() {
   }
 
   const rows = [];
-  previewSource.rows.forEach((row, idx) => {
+  rows.push(...tagSourceRows(previewSource));
+  return rows;
+}
+
+function tagSourceRows(source) {
+  const rows = [];
+  source.rows.forEach((row, idx) => {
     const tagged = Array.isArray(row) ? row.slice() : [row];
-    tagged._sourceId = previewSource.id;
-    tagged._sheetName = previewSource.sheetName || '';
-    tagged._fileName = previewSource.fileName || '';
-    tagged._sheetMonthHint = previewSource.analysis?.monthHint || '';
+    tagged._sourceId = source.id;
+    tagged._sheetName = source.sheetName || '';
+    tagged._fileName = source.fileName || '';
+    tagged._sheetMonthHint = source.analysis?.monthHint || '';
     tagged._sourceRowIndex = idx;
     rows.push(tagged);
   });
@@ -2143,51 +2141,92 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
   window._batchResults = null;
   document.getElementById('batch-result').style.display = 'none';
 
-  const parsed = [];
-  dataRows.forEach(row => {
-    if (isSummaryLikeRow(row)) return;
-    let month = '', amount = 0, name = '默认', idCard = '', phone = '', bankCard = '';
-    const monthHint = row._sheetMonthHint || '';
+  const parseRowsWithMap = (rows, rowColMap) => {
+    const parsedRows = [];
+    rows.forEach(row => {
+      if (isSummaryLikeRow(row)) return;
+      let month = '', amount = 0, name = '默认', idCard = '', phone = '', bankCard = '';
+      const monthHint = row._sheetMonthHint || '';
 
-    if (colMap.name != null) name = String(row[colMap.name] || '').trim();
-    if (colMap.month != null) month = normalizeMonthWithHint(String(row[colMap.month] || ''), monthHint);
-    if (colMap.amount != null) amount = parseAmount(String(row[colMap.amount] || ''));
-    if (colMap.idCard != null) idCard = sanitizeIdCard(row[colMap.idCard]);
-    if (colMap.phone != null) phone = sanitizePhone(row[colMap.phone]);
-    if (colMap.bankCard != null) bankCard = sanitizeBankCard(row[colMap.bankCard]);
-    if ((!month || month === '-') && monthHint) month = monthHint;
-    name = sanitizeName(name) || '默认';
+      if (rowColMap.name != null) name = String(row[rowColMap.name] || '').trim();
+      if (rowColMap.month != null) month = normalizeMonthWithHint(String(row[rowColMap.month] || ''), monthHint);
+      if (rowColMap.amount != null) amount = parseAmount(String(row[rowColMap.amount] || ''));
+      if (rowColMap.idCard != null) idCard = sanitizeIdCard(row[rowColMap.idCard]);
+      if (rowColMap.phone != null) phone = sanitizePhone(row[rowColMap.phone]);
+      if (rowColMap.bankCard != null) bankCard = sanitizeBankCard(row[rowColMap.bankCard]);
+      if ((!month || month === '-') && monthHint) month = monthHint;
+      name = sanitizeName(name) || '默认';
 
-    if (!month || month === '-') {
-      const inferredMonth = extractMonthHintFromRows([row], extractYearHint(monthHint));
-      if (inferredMonth) month = inferredMonth;
-    }
+      if (!month || month === '-') {
+        const inferredMonth = extractMonthHintFromRows([row], extractYearHint(monthHint));
+        if (inferredMonth) month = inferredMonth;
+      }
 
-    let personKey = '';
-    if (idCard) {
-      personKey = 'ID:' + idCard;
-    } else {
-      const parts = [];
-      if (name && name !== '默认') parts.push('N:' + name);
-      if (phone) parts.push('P:' + phone);
-      if (bankCard) parts.push('B:' + bankCard);
-      personKey = parts.length > 0 ? parts.join('|') : '默认';
-    }
+      let personKey = '';
+      if (idCard) {
+        personKey = 'ID:' + idCard;
+      } else {
+        const parts = [];
+        if (name && name !== '默认') parts.push('N:' + name);
+        if (phone) parts.push('P:' + phone);
+        if (bankCard) parts.push('B:' + bankCard);
+        personKey = parts.length > 0 ? parts.join('|') : '默认';
+      }
 
-    if (amount > 0 && rowHasUsableIdentity({ name, idCard, phone, bankCard })) {
-      parsed.push({
-        month: month || '-',
-        amount,
-        person: name,
-        idCard,
-        phone,
-        bankCard,
-        personKey,
-        sourceSheet: row._sheetName || '',
-        sourceFile: row._fileName || ''
-      });
-    }
-  });
+      if (amount > 0 && rowHasUsableIdentity({ name, idCard, phone, bankCard })) {
+        parsedRows.push({
+          month: month || '-',
+          amount,
+          person: name,
+          idCard,
+          phone,
+          bankCard,
+          personKey,
+          sourceSheet: row._sheetName || '',
+          sourceFile: row._fileName || ''
+        });
+      }
+    });
+    return parsedRows;
+  };
+
+  const preferredTypes = Object.keys(colMap);
+  const buildLocalColMap = (headerRow, localDataRows) => {
+    const detected = detectColumnMapping(headerRow, localDataRows);
+    const localColMap = {};
+    const byType = {};
+    Object.entries(detected.cols || {}).forEach(([ci, col]) => {
+      if (col.type && byType[col.type] == null) byType[col.type] = Number(ci);
+    });
+
+    preferredTypes.forEach(type => {
+      if (byType[type] != null) {
+        localColMap[type] = byType[type];
+      } else if (colMap[type] != null && headerRow[colMap[type]] != null) {
+        localColMap[type] = colMap[type];
+      }
+    });
+    return localColMap;
+  };
+
+  const selectedSources = (sourceItems || []).filter(item => item.selected);
+  let parsed = [];
+
+  if (selectedSources.length > 0) {
+    selectedSources.forEach(source => {
+      const taggedRows = tagSourceRows(source);
+      const { headerRow, dataRows: sourceDataRows } = smartDetectTable(taggedRows);
+      const localColMap = source.id === _previewSourceId
+        ? { ...colMap }
+        : buildLocalColMap(headerRow, sourceDataRows);
+
+      if (localColMap.amount != null) {
+        parsed.push(...parseRowsWithMap(sourceDataRows, localColMap));
+      }
+    });
+  } else {
+    parsed = parseRowsWithMap(dataRows, colMap);
+  }
 
   // 按人分组
   const personsMap = {};
@@ -2658,7 +2697,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
     let idBadges = '';
     if (hasIdCard && personIdCard) idBadges += `<span style="font-size:11px;color:var(--text2);margin-left:8px;">🪪 ${personIdCard.slice(0,6)}****${personIdCard.slice(-4)}</span>`;
     if (hasPhone && personPhone) idBadges += `<span style="font-size:11px;color:var(--text2);margin-left:8px;">📱 ${personPhone.slice(0,3)}****${personPhone.slice(-4)}</span>`;
-    if (hasBankCard && personBankCard) idBadges += `<span style="font-size:11px;color:var(--text2);margin-left:8px;">💳 ****${personBankCard.slice(-4)}</span>`;
+    if (hasBankCard && personBankCard) idBadges += `<span style="font-size:11px;color:var(--text2);margin-left:8px;">💳 ${personBankCard}</span>`;
 
     // 表头额外列
     let extraHeadCols = '';
@@ -2677,9 +2716,9 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
       const dataRows = yRows.map(r => {
         seq++;
         let extraCols = '';
-        if (hasIdCard) extraCols += `<td style="font-size:12px;color:var(--text2);">${r.idCard ? r.idCard.slice(0,6)+'****'+r.idCard.slice(-4) : '-'}</td>`;
-        if (hasPhone) extraCols += `<td style="font-size:12px;color:var(--text2);">${r.phone ? r.phone.slice(0,3)+'****'+r.phone.slice(-4) : '-'}</td>`;
-        if (hasBankCard) extraCols += `<td style="font-size:12px;color:var(--text2);">${r.bankCard ? '****'+r.bankCard.slice(-4) : '-'}</td>`;
+        if (hasIdCard) extraCols += `<td style="font-size:12px;color:var(--text2);">${r.idCard || '-'}</td>`;
+        if (hasPhone) extraCols += `<td style="font-size:12px;color:var(--text2);">${r.phone || '-'}</td>`;
+        if (hasBankCard) extraCols += `<td style="font-size:12px;color:var(--text2);">${r.bankCard || '-'}</td>`;
 
         const gapMarker = r._isGap
           ? `<tr style="background:rgba(253,114,114,0.1);"><td colspan="${gapColspan}" style="text-align:center;padding:8px;font-weight:600;color:var(--red);font-size:12px;">⚠️ 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`

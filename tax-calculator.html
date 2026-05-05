@@ -769,9 +769,10 @@ function calcTaxForward(income, cumIncome = 0, cumDeduction = 5000, cumTax = 0) 
   const newCumIncome = cumIncome + withholdingIncome;
   const taxableIncome = Math.max(0, newCumIncome - cumDeduction);
   const bracket = getBracket(taxableIncome);
-  const cumTaxDue = taxableIncome * bracket.rate - bracket.quick;
-  const currentTax = Math.max(0, cumTaxDue - cumTax);
-  const postTax = income - currentTax;
+  const cumTaxDueRaw = taxableIncome * bracket.rate - bracket.quick;
+  const cumTaxDue = Math.max(0, round2(cumTaxDueRaw));
+  const currentTax = Math.max(0, round2(cumTaxDue - round2(cumTax)));
+  const postTax = round2(income - currentTax);
   return {
     preTax: income,
     withholdingIncome,
@@ -1513,6 +1514,41 @@ function normalizeMonthWithHint(raw, monthHint = '') {
   return normalized;
 }
 
+function extractSortDateTime(raw) {
+  if (!raw) return '';
+  const text = String(raw).trim();
+  if (!text) return '';
+
+  // Excel serial date/time
+  if (/^\d{5,}(\.\d+)?$/.test(text)) {
+    const serial = parseFloat(text);
+    if (serial > 30000 && serial < 60000) {
+      const epoch = new Date(1899, 11, 30);
+      const d = new Date(epoch.getTime() + serial * 86400000);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mi = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+    }
+  }
+
+  let m = text.match(/(20\d{2})[-\/.年](\d{1,2})[-\/.月](\d{1,2})(?:[日\sT]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (m) {
+    const yyyy = m[1];
+    const mm = m[2].padStart(2, '0');
+    const dd = m[3].padStart(2, '0');
+    const hh = String(m[4] || '00').padStart(2, '0');
+    const mi = String(m[5] || '00').padStart(2, '0');
+    const ss = String(m[6] || '00').padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+  }
+
+  return '';
+}
+
 function extractMonthHintFromRows(rows, fallbackYear = '') {
   const scanRows = (rows || []).slice(0, 20);
   let yearHint = fallbackYear || '';
@@ -2193,14 +2229,18 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
       }
 
       if (amount > 0 && rowHasUsableIdentity({ name, idCard, phone, bankCard })) {
+        const monthRaw = rowColMap.month != null ? row[rowColMap.month] : '';
         parsedRows.push({
           month: month || '-',
+          monthRaw,
+          sortTime: extractSortDateTime(monthRaw),
           amount,
           person: name,
           idCard,
           phone,
           bankCard,
           personKey,
+          sourceRowIndex: row._sourceRowIndex ?? 0,
           sourceSheet: row._sheetName || '',
           sourceFile: row._fileName || ''
         });
@@ -2397,7 +2437,19 @@ function processBatch(rows, filename) {
     }
 
     if (amount > 0 && rowHasUsableIdentity({ name, idCard, phone, bankCard })) {
-      parsed.push({ month: month || '-', amount, person: name, idCard, phone, bankCard, personKey });
+      const monthRaw = colMap && colMap.month != null ? allCols[colMap.month] : '';
+      parsed.push({
+        month: month || '-',
+        monthRaw,
+        sortTime: extractSortDateTime(monthRaw),
+        amount,
+        person: name,
+        idCard,
+        phone,
+        bankCard,
+        personKey,
+        sourceRowIndex: row._sourceRowIndex ?? 0
+      });
     }
   });
 
@@ -2607,9 +2659,24 @@ function runBatchCalc() {
 
   /* 逐笔累计计税：同月多笔发放逐笔累计，但同月只扣一次5000减除费用 */
   const allResults = [];
+  const compareBatchRecordOrder = (a, b) => {
+    const monthCmp = compareMonth(a.month, b.month);
+    if (monthCmp !== 0) return monthCmp;
+
+    const ta = a.sortTime || '';
+    const tb = b.sortTime || '';
+    if (ta && tb && ta !== tb) return ta.localeCompare(tb);
+    if (ta && !tb) return -1;
+    if (!ta && tb) return 1;
+
+    const ia = Number.isFinite(a.sourceRowIndex) ? a.sourceRowIndex : 0;
+    const ib = Number.isFinite(b.sourceRowIndex) ? b.sourceRowIndex : 0;
+    return ia - ib;
+  };
+
   personKeys.forEach(key => {
     const group = personsMap[key];
-    const records = group.records.slice().sort((a, b) => compareMonth(a.month, b.month));
+    const records = group.records.slice().sort(compareBatchRecordOrder);
 
     let cumIncome = 0, cumTax = 0, cumDeduction = 0;
     let lastMonth = '';

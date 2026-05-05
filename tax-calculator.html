@@ -686,7 +686,7 @@
         </label>
       </div>
 
-      <p style="font-size:13px;color:var(--text2);margin-bottom:6px;">输入每月收入，留空的月份自动跳过。断月重置会检测跳过的月份间隔。</p>
+      <p id="multi-input-hint" style="font-size:13px;color:var(--text2);margin-bottom:6px;">输入每月税前收入，留空的月份自动跳过。断月重置会检测跳过的月份间隔。</p>
       <p style="font-size:12px;color:var(--text2);margin-bottom:16px;">年份：<input type="number" id="multi-year" min="2000" max="2100" style="width:80px;display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px;text-align:center;outline:none;"> 年（计算跨年数据时请分年计算）</p>
 
       <div class="month-grid" id="month-grid"></div>
@@ -869,6 +869,7 @@ document.querySelectorAll('.direction-btn').forEach(btn => {
 
     if (target === 'multi') {
       multiDirection = dir;
+      updateMultiInputHints();
     } else {
       batchDirection = dir;
     }
@@ -906,6 +907,22 @@ function onMonthAmountInput(input) {
     cell.classList.add('has-data');
   } else {
     cell.classList.remove('has-data');
+  }
+}
+
+/* 根据计算方向更新输入提示 */
+function updateMultiInputHints() {
+  const isReverse = multiDirection === 'reverse';
+  const placeholder = isReverse ? '税后金额' : '税前金额';
+  for (let m = 1; m <= 12; m++) {
+    const input = document.getElementById('m-amount-' + m);
+    if (input) input.placeholder = placeholder;
+  }
+  const hintEl = document.getElementById('multi-input-hint');
+  if (hintEl) {
+    hintEl.textContent = isReverse
+      ? '输入每月期望税后收入，系统反算所需税前收入。留空的月份自动跳过。'
+      : '输入每月税前收入，留空的月份自动跳过。断月重置会检测跳过的月份间隔。';
   }
 }
 
@@ -1026,12 +1043,12 @@ function renderMultiResults(results) {
         <tr>
           <td>${r.month}</td>
           <td class="label-col">${r.note}</td>
-          <td>¥${formatNum(r.preTax)}</td>
+          <td>¥${formatNum(multiDirection === 'forward' ? r.preTax : r.postTax)}</td>
           <td>¥${formatNum(r.withholdingIncome)}</td>
           <td>¥${formatNum(r.taxableIncome)}</td>
           <td>${(r.rate * 100)}%</td>
           <td class="tax-col">¥${formatNum(r.currentTax)}</td>
-          <td class="highlight">¥${formatNum(r.postTax)}</td>
+          <td class="highlight">¥${formatNum(multiDirection === 'forward' ? r.postTax : r.preTax)}</td>
         </tr>`;
       yPre += r.preTax; yTax += r.currentTax; yPost += r.postTax;
     });
@@ -1039,9 +1056,9 @@ function renderMultiResults(results) {
     if (years.length > 1) {
       tbodyHTML += `<tr style="background:var(--surface2);font-weight:600;">
         <td colspan="2" style="text-align:right;color:var(--text2);">${yr} 年小计</td>
-        <td>¥${formatNum(yPre)}</td><td></td><td></td><td></td>
+        <td>¥${formatNum(multiDirection === 'forward' ? yPre : yPost)}</td><td></td><td></td><td></td>
         <td class="tax-col">¥${formatNum(yTax)}</td>
-        <td class="highlight">¥${formatNum(yPost)}</td>
+        <td class="highlight">¥${formatNum(multiDirection === 'forward' ? yPost : yPre)}</td>
       </tr>`;
     }
   });
@@ -1092,12 +1109,12 @@ function renderMultiResults(results) {
             ${tbodyHTML}
             <tr class="total-row">
               <td colspan="2">合计</td>
-              <td>¥${formatNum(totalPre)}</td>
+              <td>¥${formatNum(multiDirection === 'forward' ? totalPre : totalPost)}</td>
               <td>¥${formatNum(results.reduce((s,r) => s + r.withholdingIncome, 0))}</td>
               <td></td>
               <td></td>
               <td class="tax-col">¥${formatNum(totalTax)}</td>
-              <td class="highlight">¥${formatNum(totalPost)}</td>
+              <td class="highlight">¥${formatNum(multiDirection === 'forward' ? totalPost : totalPre)}</td>
             </tr>
           </tbody>
         </table>
@@ -1116,7 +1133,7 @@ function exportMultiCSV() {
   const postLabel = multiDirection === 'forward' ? '税后收入' : '税前收入（反算）';
   const header = `月份,备注,${preLabel},本次预扣收入额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel}\n`;
   const rows = results.map(r =>
-    `${r.month},${r.note},${round2(r.preTax)},${round2(r.withholdingIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(r.postTax)}`
+    `${r.month},${r.note},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.withholdingIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)}`
   ).join('\n');
   downloadFile(header + rows, '多月个税计算结果.csv', 'text/csv');
 }
@@ -2453,7 +2470,7 @@ function showBatchPreview(parsed, personKeys, personsMap, filename) {
 
       <div class="summary-grid" style="margin-bottom:20px;">
         <div class="summary-item">
-          <div class="label">总记录数</div>
+          <div class="label">月度记录</div>
           <div class="value blue">${totalRows}</div>
         </div>
         <div class="summary-item">
@@ -2586,17 +2603,33 @@ function runBatchCalc() {
   const hasPhone = parsed.some(d => d.phone);
   const hasBankCard = parsed.some(d => d.bankCard);
 
-  // 逐人逐年逐月计算
+  /* 同月合并计税：同一人同月多笔发放先合并为月度总收入，再统一计税 */
   const allResults = [];
   personKeys.forEach(key => {
     const group = personsMap[key];
     const records = group.records.slice().sort((a, b) => compareMonth(a.month, b.month));
 
+    /* 按月合并：同一人同月的多笔金额汇总为一笔月度收入 */
+    const monthMap = {};
+    records.forEach(d => {
+      if (!monthMap[d.month]) {
+        monthMap[d.month] = { amount: 0, records: [] };
+      }
+      monthMap[d.month].amount += d.amount;
+      monthMap[d.month].records.push(d);
+    });
+    const mergedRecords = Object.keys(monthMap).sort((a, b) => compareMonth(a, b)).map(month => ({
+      month,
+      amount: monthMap[month].amount,
+      detailCount: monthMap[month].records.length,
+      detailRecords: monthMap[month].records,
+    }));
+
     let cumIncome = 0, cumTax = 0, cumDeduction = 0;
     let lastMonth = '';
     let lastYear = '';
 
-    records.forEach(d => {
+    mergedRecords.forEach(d => {
       const parts = d.month.split('-');
       const curYear = parts.length >= 2 ? parts[0] : '';
 
@@ -2633,12 +2666,21 @@ function runBatchCalc() {
       }
       cumIncome = r.cumIncome;
       cumTax = r.cumTaxDue;
+
+      /* 同月合并标记：如果该月有多笔明细，在结果中标注 */
+      const note = d.detailCount > 1 ? `${d.detailCount}笔合计` : '';
       allResults.push({
         person: group.name,
-        idCard: d.idCard || group.idCard,
-        phone: d.phone || group.phone,
-        bankCard: d.bankCard || group.bankCard,
-        ...d, ...r, _isGap: isGap
+        idCard: group.idCard,
+        phone: group.phone,
+        bankCard: group.bankCard,
+        month: d.month,
+        amount: d.amount,
+        note,
+        ...r,
+        _isGap: isGap,
+        _detailCount: d.detailCount,
+        _detailRecords: d.detailRecords,
       });
     });
   });
@@ -2708,7 +2750,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
     let yearSections = '';
     years.forEach((yr, yi) => {
       const yRows = yearGroups[yr];
-      const gapColspan = 6 + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
+      const gapColspan = 7 + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
       const yearSep = yi > 0
         ? `<tr style="background:rgba(108,92,231,0.12);"><td colspan="${gapColspan}" style="text-align:center;padding:10px;font-weight:700;color:var(--accent2);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`
         : '';
@@ -2724,21 +2766,22 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
           ? `<tr style="background:rgba(253,114,114,0.1);"><td colspan="${gapColspan}" style="text-align:center;padding:8px;font-weight:600;color:var(--red);font-size:12px;">⚠️ 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`
           : '';
         return gapMarker + `
-          <tr>
+          <tr${r._detailCount > 1 ? ' style="background:rgba(253,203,110,0.08);"' : ''}>
             <td>${seq}</td>
             <td>${r.month}</td>
             ${extraCols}
-            <td>¥${formatNum(r.preTax)}</td>
+            <td>¥${formatNum(batchDirection === 'forward' ? r.preTax : r.postTax)}</td>
             <td>${(r.rate * 100)}%</td>
             <td class="tax-col">¥${formatNum(r.currentTax)}</td>
-            <td class="highlight">¥${formatNum(r.postTax)}</td>
+            <td class="highlight">¥${formatNum(batchDirection === 'forward' ? r.postTax : r.preTax)}</td>
+            <td style="font-size:12px;color:var(--orange);">${r.note || ''}</td>
           </tr>`;
       }).join('');
 
       yearSections += yearSep + dataRows;
     });
 
-    const totalColspan = 2 + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
+    const totalColspan = 3 + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
 
     return `
       <div style="margin-bottom:24px;">
@@ -2759,16 +2802,18 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
                 <th>适用税率</th>
                 <th>预扣税额</th>
                 <th>${postColLabel}</th>
+                <th>备注</th>
               </tr>
             </thead>
             <tbody>
               ${yearSections}
               <tr class="total-row">
                 <td colspan="${totalColspan}">小计</td>
-                <td>¥${formatNum(personPre)}</td>
+                <td>¥${formatNum(batchDirection === 'forward' ? personPre : personPost)}</td>
                 <td></td>
                 <td class="tax-col">¥${formatNum(personTax)}</td>
-                <td class="highlight">¥${formatNum(personPost)}</td>
+                <td class="highlight">¥${formatNum(batchDirection === 'forward' ? personPost : personPre)}</td>
+                <td></td>
               </tr>
             </tbody>
           </table>
@@ -2779,7 +2824,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
   container.innerHTML = `
     <div class="summary-grid">
       <div class="summary-item">
-        <div class="label">总记录数</div>
+        <div class="label">月度记录</div>
         <div class="value blue">${results.length}</div>
       </div>
       <div class="summary-item">
@@ -2833,14 +2878,14 @@ function exportBatchCSV() {
   if (hasIdCard) headerCols += ',身份证号';
   if (hasPhone) headerCols += ',电话';
   if (hasBankCard) headerCols += ',银行卡号';
-  headerCols += `,月份,${preLabel},本次预扣收入额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel}`;
+  headerCols += `,月份,${preLabel},本次预扣收入额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},备注`;
 
   const rows = sorted.map(r => {
     let cols = `"${r.person}"`;
     if (hasIdCard) cols += `,"${r.idCard || ''}"`;
     if (hasPhone) cols += `,"${r.phone || ''}"`;
     if (hasBankCard) cols += `,"${r.bankCard || ''}"`;
-    cols += `,"${r.month}",${round2(r.preTax)},${round2(r.withholdingIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(r.postTax)}`;
+    cols += `,"${r.month}",${round2(batchDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.withholdingIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(batchDirection === 'forward' ? r.postTax : r.preTax)},"${r.note || ''}"`;
     return cols;
   }).join('\n');
 

@@ -2760,7 +2760,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
       yearSections += yearSep + dataRows;
     });
 
-    const totalColspan = 3 + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
+    const totalColspan = 2 + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
 
     return `
       <div style="margin-bottom:24px;">
@@ -2894,14 +2894,71 @@ function formatNum(n) {
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function downloadFile(content, filename, type) {
+/* 文件导出：多层回退兼容不同浏览器和协议（file:// / https://） */
+async function downloadFile(content, filename, type) {
   const blob = new Blob(['\uFEFF' + content], { type: type + ';charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+
+  /* 第一层：File System Access API（支持自选保存路径，仅安全上下文可用） */
+  if (window.showSaveFilePicker) {
+    try {
+      const ext = filename.split('.').pop() || 'csv';
+      const mimeMap = { csv: 'text/csv', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xls: 'application/vnd.ms-excel' };
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: ext.toUpperCase() + ' 文件', accept: { [mimeMap[ext] || type]: ['.' + ext] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+    }
+  }
+
+  /* 第二层：传统 a 标签 + MouseEvent 派发（兼容大多数 HTTPS 场景） */
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    const evt = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
+    a.dispatchEvent(evt);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    return;
+  } catch (e) { /* 继续回退 */ }
+
+  /* 第三层：新窗口打开内容（兼容 file:// 协议及 Safari 等严格环境） */
+  try {
+    const reader = new FileReader();
+    reader.onload = function () {
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write(`<html><head><title>${filename}</title></head><body><pre style="font-family:monospace;font-size:13px;white-space:pre-wrap;">${content.replace(/</g, '&lt;')}</pre><script>document.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='s'){e.preventDefault();document.execCommand('saveAs','','${filename}')}});<\/script></body></html>`);
+        w.document.close();
+      }
+    };
+    reader.readAsText(blob);
+    return;
+  } catch (e) { /* 继续回退 */ }
+
+  /* 第四层：复制到剪贴板并提示 */
+  try {
+    await navigator.clipboard.writeText(content);
+    alert('已将内容复制到剪贴板，请粘贴到文本编辑器中保存为：' + filename);
+  } catch (e) {
+    /* 最终兜底：弹出文本框手动复制 */
+    const ta = document.createElement('textarea');
+    ta.value = content;
+    ta.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:80vw;height:60vh;z-index:99999;font-family:monospace;font-size:12px;';
+    document.body.appendChild(ta);
+    ta.select();
+    alert('请按 Ctrl+C / Cmd+C 复制内容，然后粘贴到文本编辑器保存为：' + filename);
+    document.body.removeChild(ta);
+  }
 }
 
 // Init

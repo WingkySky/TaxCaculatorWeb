@@ -1950,15 +1950,68 @@ function analyzeWorkbookSheets(wb, fileName) {
 
 // ==================== Smart Table Detection ====================
 
-const COL_KEYWORDS = {
-  name:    /姓名|户名|名称|人员|收款人|员工|name|person/i,
-  month:   /月份|month|期间|时间|日期|date|发放月|所属月/i,
-  amount:  /金额|amount|收入|income|报酬|pay|实发金额?|税前收入?|税后收入?|应发金额?|应付金额?|客户支付合计|累计收入|收入额|发放金额|合计金额/i,
-  idCard:  /身份证|身份证号|身份证号码|id\s*card|idcard|证件号/i,
-  phone:   /电话|phone|手机|mobile|联系电话/i,
-  bankCard:/银行|bank|卡号|bankcard|账号|开户|账户/i,
-  note:    /备注|note|说明|remark|类型|方式|承担|服务费|税源地|业务类型/i,
-};
+/**
+ * 列识别关键词配置，按优先级从高到低排序
+ */
+const COL_KEYWORDS = [
+  {
+    type: 'name',
+    patterns: [
+      /^(姓名|户名|人员|收款人|员工|name|person)$/i,           // 高优先级：精确匹配
+      /(^|\s|_|-)姓名(^|\s|_|-$)/i, /(^|\s|_|-)员工(^|\s|_|-$)/i, /(^|\s|_|-)人员(^|\s|_|-$)/i,  // 独立出现的关键词
+      /姓名|员工|人员|收款人|person/i                           // 中优先级：包含关键词
+    ],
+    exclude: /公司|单位|企业|机构|部门|集体|组织|集团/i       // 排除公司类名称
+  },
+  {
+    type: 'month',
+    patterns: [
+      /^(月份|month|期间|时间|日期|date|发放月|所属月)$/i,
+      /月份|month|期间|时间|日期|date|发放月|所属月/i
+    ],
+    exclude: null
+  },
+  {
+    type: 'amount',
+    patterns: [
+      /^(金额|amount|收入|income|报酬|pay|实发金额?|税前收入?|税后收入?|应发金额?|应付金额?|客户支付合计|累计收入|收入额|发放金额|合计金额)$/i,
+      /金额|amount|收入|income|报酬|pay|实发|税前|税后|应发|应付|发放|合计/i
+    ],
+    exclude: null
+  },
+  {
+    type: 'idCard',
+    patterns: [
+      /^(身份证|身份证号|身份证号码|id\s*card|idcard|证件号)$/i,
+      /身份证|身份证号|id\s*card|idcard|证件号/i
+    ],
+    exclude: null
+  },
+  {
+    type: 'phone',
+    patterns: [
+      /^(电话|phone|手机|mobile|联系电话)$/i,
+      /电话|phone|手机|mobile|联系/i
+    ],
+    exclude: null
+  },
+  {
+    type: 'bankCard',
+    patterns: [
+      /^(银行|bank|卡号|bankcard|账号|开户|账户)$/i,
+      /银行|bank|卡号|bankcard|账号|开户|账户/i
+    ],
+    exclude: null
+  },
+  {
+    type: 'note',
+    patterns: [
+      /^(备注|note|说明|remark|类型|方式|承担|服务费|税源地|业务类型)$/i,
+      /备注|note|说明|remark|类型|方式|承担|服务费|税源地|业务/i
+    ],
+    exclude: null
+  }
+];
 
 const COL_TYPE_LABELS = {
   '':        '— 不识别 —',
@@ -1970,6 +2023,25 @@ const COL_TYPE_LABELS = {
   bankCard:  '💳 银行卡',
   note:      '📝 备注',
 };
+
+/**
+ * 计算某个表头匹配某个类型的得分
+ */
+function getColumnMatchScore(header, config) {
+  const v = String(header || '').trim();
+  if (!v) return 0;
+  
+  // 检查是否在排除列表中
+  if (config.exclude && config.exclude.test(v)) return -1;
+  
+  // 按模式优先级匹配，得分依次递减
+  for (let i = 0; i < config.patterns.length; i++) {
+    if (config.patterns[i].test(v)) {
+      return config.patterns.length - i;  // 前面的模式得分更高
+    }
+  }
+  return 0;
+}
 
 /**
  * 智能探测数据表：扫描前20行找到关键词最密集的行作为表头
@@ -1986,7 +2058,13 @@ function smartDetectTable(rows) {
     row.forEach(cell => {
       const v = String(cell || '');
       if (!v.trim()) return;
-      Object.values(COL_KEYWORDS).forEach(re => { if (re.test(v)) score++; });
+      // 检查是否匹配任何列识别关键词
+      for (const config of COL_KEYWORDS) {
+        if (getColumnMatchScore(v, config) > 0) {
+          score++;
+          break;
+        }
+      }
       if (/序号|编号|^#$/.test(v)) score += 0.5;
     });
     if (score > bestScore) { bestScore = score; bestIdx = i; }
@@ -2012,19 +2090,41 @@ function smartDetectTable(rows) {
 function detectColumnMapping(headerRow, dataRows) {
   const mapping = {};
   const used = new Set();
+  const typeScores = {}; // 记录每个类型在各列中的得分
 
+  // 第一阶段：为每一列计算每个类型的匹配得分
   headerRow.forEach((cell, i) => {
     const v = String(cell || '').trim();
     if (!v) return;
-    for (const [type, re] of Object.entries(COL_KEYWORDS)) {
-      if (type === 'amount') continue;
-      if (!used.has(type) && re.test(v)) {
-        mapping[i] = type;
-        used.add(type);
-        break;
-      }
+    
+    typeScores[i] = {};
+    for (const config of COL_KEYWORDS) {
+      typeScores[i][config.type] = getColumnMatchScore(v, config);
     }
   });
+
+  // 第二阶段：按类型逐个选择最佳匹配列（排除金额列先不处理）
+  for (const config of COL_KEYWORDS) {
+    const type = config.type;
+    if (type === 'amount' || used.has(type)) continue;
+    
+    let bestCol = null;
+    let bestScore = 0;
+    
+    for (let i = 0; i < headerRow.length; i++) {
+      if (mapping[i]) continue; // 列已被占用
+      const score = typeScores[i]?.[type] || 0;
+      if (score > bestScore) {
+        bestScore = score;
+        bestCol = i;
+      }
+    }
+    
+    if (bestCol != null && bestScore > 0) {
+      mapping[bestCol] = type;
+      used.add(type);
+    }
+  }
 
   // 金额列优先按表头 + 数值样本双重判定，避免把“发放方式”等列误识别成金额
   let bestAmountIdx = null;
@@ -2449,15 +2549,37 @@ function processBatch(rows, filename) {
   let colMap = null;
   if (hasHeader) {
     colMap = {};
+    const nameCandidates = [];
     firstRow.forEach((cell, i) => {
       const c = (cell || '').toLowerCase();
+      const cellStr = String(cell || '').trim();
+      
       if (/月份|month|时间|日期|date/.test(c) && colMap.month == null) colMap.month = i;
       else if (/金额|amount|收入|income|报酬|pay/.test(c) && colMap.amount == null) colMap.amount = i;
       else if (/身份证|id\s*card|idcard/.test(c) && colMap.idCard == null) colMap.idCard = i;
       else if (/电话|phone|手机|mobile/.test(c) && colMap.phone == null) colMap.phone = i;
       else if (/银行|bank|卡号|bankcard/.test(c) && colMap.bankCard == null) colMap.bankCard = i;
-      else if (/姓名|name|人员|person/.test(c) && colMap.name == null) colMap.name = i;
+      // 收集姓名候选人，后面统一选择最佳的
+      else if (/姓名|员工|人员|person/.test(c)) {
+        // 排除公司名称
+        if (!/(公司|单位|企业|机构|部门|集体|组织|集团)/i.test(cellStr)) {
+          nameCandidates.push({ i, cell: cellStr });
+        }
+      }
     });
+    
+    // 选择最佳的姓名列
+    if (nameCandidates.length > 0 && colMap.name == null) {
+      // 优先选择包含"姓名"、"员工"的列
+      let best = null;
+      for (const cand of nameCandidates) {
+        if (!best || /姓名|员工/.test(cand.cell)) {
+          best = cand;
+          if (/姓名/.test(cand.cell)) break; // 找到"姓名"直接选
+        }
+      }
+      if (best) colMap.name = best.i;
+    }
   }
 
   // 如果无表头，自动探测列类型

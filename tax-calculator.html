@@ -652,8 +652,9 @@
   <p class="subtitle">支持税前↔税后互算 · 多月累计预扣 · 批量计算</p>
 
   <div class="info-box">
-    <strong>📌 适用场景：</strong>平台连续劳务（如直播、外卖、网约车等连续性收入），采用<strong>累计预扣法</strong>计税（依据：国家税务总局公告2018年第61号）。<br>
-    <strong>📌 计税规则：</strong>每次劳务报酬收入 × 80% 为"预扣收入额"，累计预扣收入额减去累计减除费用（5,000元/月）后，按 3%～45% 七级超额累进税率预扣个税。<br>
+    <strong>📌 适用场景：</strong>平台连续劳务（如直播、外卖、网约车等连续性收入），2025年10月1日及以后发放的结算采用<strong>累计预扣法</strong>计税（依据：国家税务总局公告2018年第61号）。<br>
+    <strong>📌 政策切换：</strong>2025年10月1日为政策实施时间。2025年9月及之前发放的结算按<strong>生产经营所得</strong>计算，不扣税；2025年10月及之后发放的结算适用新政策（累计预扣法）。<br>
+    <strong>📌 新政策计税规则：</strong>每次劳务报酬收入 × 80% 为"预扣收入额"，累计预扣收入额减去累计减除费用（5,000元/月）后，按 3%～45% 七级超额累进税率预扣个税。<br>
     <strong>📌 税率表：</strong>≤36,000 → 3%、≤144,000 → 10%、≤300,000 → 20%、≤420,000 → 25%、≤660,000 → 30%、≤960,000 → 35%、>960,000 → 45%<br>
     <strong>📌 跨年规则：</strong>累计预扣法按年度重置，每年1月起累计收入、累计已预扣税额、累计减除费用均归零重新起算。<br>
     <strong>📌 断月规则：</strong>平台连续劳务发放中断超过1个月，累计应归零重新起算（可选，通过「断月重置」开关启用）。
@@ -816,6 +817,72 @@ function calcTaxReverse(postTaxTarget, cumIncome = 0, cumDeduction = 5000, cumTa
   return calcTaxForward(preTax, cumIncome, cumDeduction, cumTax);
 }
 
+// ==================== 旧政策（按次预扣） ====================
+// 政策切换时间：2025年10月1日
+const POLICY_SWITCH_YEAR = 2025;
+const POLICY_SWITCH_MONTH = 10;
+
+/**
+ * 判断该月份是否适用新政策
+ * @param {string} monthStr 月份字符串，格式为 "YYYY-MM"
+ * @returns {boolean} true表示适用新政策，false表示适用旧政策
+ */
+function isNewPolicy(monthStr) {
+  if (!monthStr || monthStr === '-') {
+    // 如果没有月份信息，默认适用当前政策
+    const now = new Date();
+    const nowYear = now.getFullYear();
+    const nowMonth = now.getMonth() + 1;
+    return nowYear > POLICY_SWITCH_YEAR || 
+           (nowYear === POLICY_SWITCH_YEAR && nowMonth >= POLICY_SWITCH_MONTH);
+  }
+  
+  const parts = monthStr.split('-');
+  if (parts.length < 2) return false;
+  
+  const year = parseInt(parts[0]);
+  const month = parseInt(parts[1]);
+  
+  return year > POLICY_SWITCH_YEAR || 
+         (year === POLICY_SWITCH_YEAR && month >= POLICY_SWITCH_MONTH);
+}
+
+/**
+ * 旧政策：计算单笔预扣税额（按次预扣）
+ * 劳务报酬所得按次预扣预缴：
+ * - 收入不超过4000元的，减除费用800元
+ * - 收入超过4000元的，减除20%的费用
+ * - 其余额为应纳税所得额
+ * - 适用20%-40%的三级累进预扣率
+ */
+function calcTaxOldPolicy(income) {
+  // 旧政策：2025年10月1日之前按生产经营所得计算，不扣税
+  const currentTax = 0;
+  const postTax = income;
+  
+  return {
+    preTax: income,
+    withholdingIncome: 0, // 不预扣
+    cumIncome: 0,  // 旧政策不累计
+    cumDeduction: 0,
+    taxableIncome: 0,
+    rate: 0,
+    quick: 0,
+    cumTaxDue: 0,
+    currentTax: currentTax,
+    postTax: postTax,
+    isOldPolicy: true  // 标记为旧政策
+  };
+}
+
+/**
+ * 旧政策：已知税后金额，反算税前（旧政策不扣税，所以税前=税后）
+ */
+function calcTaxReverseOldPolicy(postTaxTarget) {
+  // 旧政策不扣税，所以税前等于税后
+  return calcTaxOldPolicy(postTaxTarget);
+}
+
 // ==================== Gap Detection ====================
 
 /**
@@ -956,36 +1023,66 @@ function calcMulti() {
   let lastMonth = '';
 
   data.forEach(d => {
-    // 断月重置：与上一有数据的月份间隔 >1 个月则重新起算
-    let isGap = false;
-    if (gapReset && lastMonth && isGapMonth(lastMonth, d.month)) {
-      cumIncome = 0;
-      cumTax = 0;
-      cumDeduction = 0;
-      lastMonth = '';
-      isGap = true;
-    }
+    // 判断是否适用新政策
+    const useNewPolicy = isNewPolicy(d.month);
+    
+    if (useNewPolicy) {
+      // 新政策：累计预扣
+      // 断月重置：与上一有数据的月份间隔 >1 个月则重新起算
+      let isGap = false;
+      if (gapReset && lastMonth && isGapMonth(lastMonth, d.month)) {
+        cumIncome = 0;
+        cumTax = 0;
+        cumDeduction = 0;
+        lastMonth = '';
+        isGap = true;
+      }
 
-    if (d.month !== lastMonth) {
-      lastMonth = d.month;
-      cumDeduction += 5000;
-    }
+      if (d.month !== lastMonth) {
+        lastMonth = d.month;
+        cumDeduction += 5000;
+      }
 
-    let r;
-    if (multiDirection === 'forward') {
-      r = calcTaxForward(d.amount, cumIncome, cumDeduction, cumTax);
+      let r;
+      if (multiDirection === 'forward') {
+        r = calcTaxForward(d.amount, cumIncome, cumDeduction, cumTax);
+      } else {
+        r = calcTaxReverse(d.amount, cumIncome, cumDeduction, cumTax);
+      }
+
+      cumIncome = r.cumIncome;
+      cumTax = r.cumTaxDue;
+
+      results.push({
+        ...d,
+        ...r,
+        _isGap: isGap,
+        _isOldPolicy: false
+      });
     } else {
-      r = calcTaxReverse(d.amount, cumIncome, cumDeduction, cumTax);
+      // 旧政策：按次预扣，不累计
+      let r;
+      if (multiDirection === 'forward') {
+        r = calcTaxOldPolicy(d.amount);
+      } else {
+        r = calcTaxReverseOldPolicy(d.amount);
+      }
+      
+      // 旧政策切换到新政策时需要重置累计
+      if (lastMonth && isNewPolicy(lastMonth)) {
+        cumIncome = 0;
+        cumTax = 0;
+        cumDeduction = 0;
+      }
+      lastMonth = d.month;
+
+      results.push({
+        ...d,
+        ...r,
+        _isGap: false,
+        _isOldPolicy: true
+      });
     }
-
-    cumIncome = r.cumIncome;
-    cumTax = r.cumTaxDue;
-
-    results.push({
-      ...d,
-      ...r,
-      _isGap: isGap,
-    });
   });
 
   renderMultiResults(results);
@@ -1023,14 +1120,14 @@ function renderMultiResults(results) {
   });
   const years = Object.keys(yearGroups).sort();
 
-  // 逐行明细（按年分组 + 断月/跨年标记 + 年度小计）
+  // 逐行明细（按年分组 + 断月/跨年标记 + 年度小计 + 政策标记）
   let tbodyHTML = '';
   let seq = 0;
   years.forEach((yr, yi) => {
     const yRows = yearGroups[yr];
     // 跨年分隔
     if (yi > 0) {
-      tbodyHTML += `<tr style="background:rgba(108,92,231,0.12);"><td colspan="9" style="text-align:center;padding:10px;font-weight:700;color:var(--accent2);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`;
+      tbodyHTML += `<tr style="background:rgba(108,92,231,0.12);"><td colspan="10" style="text-align:center;padding:10px;font-weight:700;color:var(--accent2);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`;
     }
     // 年度小计变量
     let yPre = 0, yTax = 0, yPost = 0;
@@ -1038,7 +1135,11 @@ function renderMultiResults(results) {
       seq++;
       // 断月标记
       if (r._isGap) {
-        tbodyHTML += `<tr style="background:rgba(253,114,114,0.1);"><td colspan="9" style="text-align:center;padding:8px;font-weight:600;color:var(--red);font-size:12px;">⚠️ 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`;
+        tbodyHTML += `<tr style="background:rgba(253,114,114,0.1);"><td colspan="10" style="text-align:center;padding:8px;font-weight:600;color:var(--red);font-size:12px;">⚠️ 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`;
+      }
+      // 旧政策标记
+      if (r._isOldPolicy) {
+        tbodyHTML += `<tr style="background:rgba(253,203,110,0.1);"><td colspan="10" style="text-align:center;padding:8px;font-weight:600;color:var(--orange);font-size:12px;">📅 旧政策：${r.month} 按生产经营所得计算，不扣税（2025年10月1日前）</td></tr>`;
       }
       tbodyHTML += `
         <tr>
@@ -1051,6 +1152,7 @@ function renderMultiResults(results) {
           <td>${(r.rate * 100)}%</td>
           <td class="tax-col">¥${formatNum(r.currentTax)}</td>
           <td class="highlight">¥${formatNum(multiDirection === 'forward' ? r.postTax : r.preTax)}</td>
+          <td>${r._isOldPolicy ? '旧政策' : '新政策'}</td>
         </tr>`;
       yPre += r.preTax; yTax += r.currentTax; yPost += r.postTax;
     });
@@ -1061,6 +1163,7 @@ function renderMultiResults(results) {
         <td>¥${formatNum(multiDirection === 'forward' ? yPre : yPost)}</td><td></td><td></td><td></td><td></td>
         <td class="tax-col">¥${formatNum(yTax)}</td>
         <td class="highlight">¥${formatNum(multiDirection === 'forward' ? yPost : yPre)}</td>
+        <td></td>
       </tr>`;
     }
   });
@@ -1106,6 +1209,7 @@ function renderMultiResults(results) {
               <th>适用税率</th>
               <th>本期预扣税额</th>
               <th>${multiDirection === 'forward' ? '税后收入' : '税前收入（反算）'}</th>
+              <th>政策类型</th>
             </tr>
           </thead>
           <tbody>
@@ -1118,6 +1222,7 @@ function renderMultiResults(results) {
               <td></td>
               <td class="tax-col">¥${formatNum(totalTax)}</td>
               <td class="highlight">¥${formatNum(multiDirection === 'forward' ? totalPost : totalPre)}</td>
+              <td></td>
             </tr>
           </tbody>
         </table>
@@ -1134,9 +1239,9 @@ function exportMultiCSV() {
   const results = window._multiResults;
   const preLabel = multiDirection === 'forward' ? '税前收入' : '税后收入（已知）';
   const postLabel = multiDirection === 'forward' ? '税后收入' : '税前收入（反算）';
-  const header = `月份,备注,${preLabel},本次预扣收入额,累计发放金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel}\n`;
+  const header = `月份,备注,${preLabel},本次预扣收入额,累计发放金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},政策类型\n`;
   const rows = results.map(r =>
-    `${r.month},${r.note},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)}`
+    `${r.month},${r.note},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},${r._isOldPolicy ? '旧政策' : '新政策'}`
   ).join('\n');
   downloadFile(header + rows, '多月个税计算结果.csv', 'text/csv');
 }
@@ -2657,7 +2762,7 @@ function runBatchCalc() {
   const hasPhone = parsed.some(d => d.phone);
   const hasBankCard = parsed.some(d => d.bankCard);
 
-  /* 逐笔累计计税：同月多笔发放逐笔累计，但同月只扣一次5000减除费用 */
+  /* 逐笔计税，根据月份判断政策类型 */
   const allResults = [];
   const compareBatchRecordOrder = (a, b) => {
     const monthCmp = compareMonth(a.month, b.month);
@@ -2683,51 +2788,87 @@ function runBatchCalc() {
     let lastYear = '';
 
     records.forEach(d => {
-      const parts = d.month.split('-');
-      const curYear = parts.length >= 2 ? parts[0] : '';
+      // 判断是否适用新政策
+      const useNewPolicy = isNewPolicy(d.month);
+      
+      if (useNewPolicy) {
+        // 新政策：累计预扣
+        const parts = d.month.split('-');
+        const curYear = parts.length >= 2 ? parts[0] : '';
 
-      if (curYear && curYear !== lastYear) {
-        if (lastYear !== '') {
+        if (curYear && curYear !== lastYear) {
+          if (lastYear !== '') {
+            cumIncome = 0;
+            cumTax = 0;
+            cumDeduction = 0;
+            lastMonth = '';
+          }
+          lastYear = curYear;
+        }
+
+        // 断月重置：开启时，与上一月份间隔 >1 个月则重新起算
+        let isGap = false;
+        if (batchGapReset && lastMonth && isGapMonth(lastMonth, d.month)) {
           cumIncome = 0;
           cumTax = 0;
           cumDeduction = 0;
           lastMonth = '';
+          isGap = true;
         }
-        lastYear = curYear;
-      }
 
-      // 断月重置：开启时，与上一月份间隔 >1 个月则重新起算
-      let isGap = false;
-      if (batchGapReset && lastMonth && isGapMonth(lastMonth, d.month)) {
-        cumIncome = 0;
-        cumTax = 0;
-        cumDeduction = 0;
-        lastMonth = '';
-        isGap = true;
-      }
+        /* 同月只扣一次5000减除费用：不同月份才累加 */
+        if (d.month !== lastMonth) {
+          lastMonth = d.month;
+          cumDeduction += 5000;
+        }
 
-      /* 同月只扣一次5000减除费用：不同月份才累加 */
-      if (d.month !== lastMonth) {
-        lastMonth = d.month;
-        cumDeduction += 5000;
-      }
+        let r;
+        if (batchDirection === 'forward') {
+          r = calcTaxForward(d.amount, cumIncome, cumDeduction, cumTax);
+        } else {
+          r = calcTaxReverse(d.amount, cumIncome, cumDeduction, cumTax);
+        }
+        cumIncome = r.cumIncome;
+        cumTax = r.cumTaxDue;
 
-      let r;
-      if (batchDirection === 'forward') {
-        r = calcTaxForward(d.amount, cumIncome, cumDeduction, cumTax);
+        allResults.push({
+          person: group.name,
+          idCard: d.idCard || group.idCard,
+          phone: d.phone || group.phone,
+          bankCard: d.bankCard || group.bankCard,
+          ...d,
+          ...r,
+          _isGap: isGap,
+          _isOldPolicy: false
+        });
       } else {
-        r = calcTaxReverse(d.amount, cumIncome, cumDeduction, cumTax);
-      }
-      cumIncome = r.cumIncome;
-      cumTax = r.cumTaxDue;
+        // 旧政策：按次预扣，不累计
+        let r;
+        if (batchDirection === 'forward') {
+          r = calcTaxOldPolicy(d.amount);
+        } else {
+          r = calcTaxReverseOldPolicy(d.amount);
+        }
+        
+        // 如果之前是新政策，现在切换到旧政策，需要重置累计
+        if (lastMonth && isNewPolicy(lastMonth)) {
+          cumIncome = 0;
+          cumTax = 0;
+          cumDeduction = 0;
+        }
+        lastMonth = d.month;
 
-      allResults.push({
-        person: group.name,
-        idCard: d.idCard || group.idCard,
-        phone: d.phone || group.phone,
-        bankCard: d.bankCard || group.bankCard,
-        ...d, ...r, _isGap: isGap
-      });
+        allResults.push({
+          person: group.name,
+          idCard: d.idCard || group.idCard,
+          phone: d.phone || group.phone,
+          bankCard: d.bankCard || group.bankCard,
+          ...d,
+          ...r,
+          _isGap: false,
+          _isOldPolicy: true
+        });
+      }
     });
   });
 
@@ -2811,7 +2952,12 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
         const gapMarker = r._isGap
           ? `<tr style="background:rgba(253,114,114,0.1);"><td colspan="${gapColspan}" style="text-align:center;padding:8px;font-weight:600;color:var(--red);font-size:12px;">⚠️ 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`
           : '';
-        return gapMarker + `
+        
+        const oldPolicyMarker = r._isOldPolicy
+          ? `<tr style="background:rgba(253,203,110,0.1);"><td colspan="${gapColspan}" style="text-align:center;padding:8px;font-weight:600;color:var(--orange);font-size:12px;">📅 旧政策：${r.month} 按生产经营所得计算，不扣税（2025年10月1日前）</td></tr>`
+          : '';
+        
+        return gapMarker + oldPolicyMarker + `
           <tr>
             <td>${seq}</td>
             <td>${r.month}</td>
@@ -2821,6 +2967,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
             <td>${(r.rate * 100)}%</td>
             <td class="tax-col">¥${formatNum(r.currentTax)}</td>
             <td class="highlight">¥${formatNum(batchDirection === 'forward' ? r.postTax : r.preTax)}</td>
+            <td>${r._isOldPolicy ? '旧政策' : '新政策'}</td>
           </tr>`;
       }).join('');
 
@@ -2849,6 +2996,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
                 <th>适用税率</th>
                 <th>预扣税额</th>
                 <th>${postColLabel}</th>
+                <th>政策类型</th>
               </tr>
             </thead>
             <tbody>
@@ -2860,6 +3008,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
                 <td></td>
                 <td class="tax-col">¥${formatNum(personTax)}</td>
                 <td class="highlight">¥${formatNum(batchDirection === 'forward' ? personPost : personPre)}</td>
+                <td></td>
               </tr>
             </tbody>
           </table>
@@ -2924,14 +3073,14 @@ function exportBatchCSV() {
   if (hasIdCard) headerCols += ',身份证号';
   if (hasPhone) headerCols += ',电话';
   if (hasBankCard) headerCols += ',银行卡号';
-  headerCols += `,月份,${preLabel},本次预扣收入额,累计发放金额,累计应纳税所得额,适用税率,本期预扣税额,${postColLabel}`;
+  headerCols += `,月份,${preLabel},本次预扣收入额,累计发放金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},政策类型`;
 
   const rows = sorted.map(r => {
     let cols = `"${r.person}"`;
     if (hasIdCard) cols += `,"${r.idCard || ''}"`;
     if (hasPhone) cols += `,"${r.phone || ''}"`;
     if (hasBankCard) cols += `,"${r.bankCard || ''}"`;
-    cols += `,"${r.month}",${round2(batchDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(batchDirection === 'forward' ? r.postTax : r.preTax)}`;
+    cols += `,"${r.month}",${round2(batchDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(batchDirection === 'forward' ? r.postTax : r.preTax)},${r._isOldPolicy ? '旧政策' : '新政策'}`;
     return cols;
   }).join('\n');
 

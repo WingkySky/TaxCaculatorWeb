@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>平台连续劳务报酬个税计算器</title>
+<title>个税计算器 · 劳务报酬 / 工资薪金</title>
 <style>
   :root {
     --bg: #0f1117;
@@ -400,6 +400,60 @@
   .direction-btn:hover { color: var(--text); }
   .direction-btn.active { background: var(--accent); color: #fff; }
 
+  /* Income type selector（劳务报酬 / 工资薪金） */
+  .income-type-toggle {
+    display: flex;
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 4px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+  }
+  .income-type-btn {
+    flex: 1;
+    padding: 11px 16px;
+    text-align: center;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text2);
+    transition: all 0.2s;
+    border: none;
+    background: none;
+  }
+  .income-type-btn:hover { color: var(--text); }
+  .income-type-btn.active { background: var(--accent); color: #fff; }
+
+  /* 工资薪金参数网格 */
+  .salary-params-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .sp-field label {
+    display: block;
+    font-size: 12px;
+    color: var(--text2);
+    margin-bottom: 4px;
+  }
+  .sp-field input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+  }
+  .sp-field input:focus { border-color: var(--accent); }
+  .input-error {
+    border-color: var(--red) !important;
+    background: rgba(253,114,114,0.08) !important;
+  }
+
   /* Batch results toolbar */
   .toolbar {
     display: flex;
@@ -650,16 +704,45 @@
 </head>
 <body>
 <div class="container">
-  <h1>📊 平台连续劳务报酬个税计算器</h1>
+  <h1>📊 个税计算器 · 劳务报酬 / 工资薪金</h1>
   <p class="subtitle">支持税前↔税后互算 · 多月累计预扣 · 批量计算</p>
 
-  <div class="info-box">
+  <div class="info-box" id="info-labor">
     <strong>📌 适用场景：</strong>平台连续劳务（如直播、外卖、网约车等连续性收入），2025年10月1日及以后发放的结算采用<strong>累计预扣法</strong>计税（依据：国家税务总局公告2018年第61号）。<br>
     <strong>📌 政策切换：</strong>2025年10月1日为政策实施时间。2025年9月及之前发放的结算按<strong>生产经营所得</strong>计算，不扣税；2025年10月及之后发放的结算适用新政策（累计预扣法）。<br>
     <strong>📌 新政策计税规则：</strong>每次劳务报酬收入 × 80% 为"预扣收入额"，累计预扣收入额减去累计减除费用（5,000元/月）后，按 3%～45% 七级超额累进税率预扣个税。<br>
     <strong>📌 税率表：</strong>≤36,000 → 3%、≤144,000 → 10%、≤300,000 → 20%、≤420,000 → 25%、≤660,000 → 30%、≤960,000 → 35%、>960,000 → 45%<br>
     <strong>📌 跨年规则：</strong>累计预扣法按年度重置，每年1月起累计收入、累计已预扣税额、累计减除费用均归零重新起算。<br>
     <strong>📌 断月规则：</strong>平台连续劳务发放中断超过1个月，累计应归零重新起算（可选，通过「断月重置」开关启用）。
+  </div>
+
+  <div class="info-box" id="info-salary" style="display:none;">
+    <strong>📌 适用场景：</strong>单位发放的<strong>工资薪金</strong>所得，按<strong>累计预扣法</strong>预扣预缴个税（依据：国家税务总局公告2020年第13号）。<br>
+    <strong>📌 计税公式：</strong>累计应纳税所得额 = 累计应发工资 − 累计减除费用（5,000元/月） − 累计三险一金（个人部分） − 累计专项附加扣除；本期预扣 = 累计应纳税额 − 累计已预扣。<br>
+    <strong>📌 税后实发：</strong>应发工资 − 个人三险一金 − 个人所得税。三险一金按「工资参数」中的基数×比例自动计算，比例可按所在城市调整。<br>
+    <strong>📌 税率表：</strong>≤36,000 → 3%、≤144,000 → 10%、≤300,000 → 20%、≤420,000 → 25%、≤660,000 → 30%、≤960,000 → 35%、>960,000 → 45%<br>
+    <strong>📌 跨年规则：</strong>每年1月起，累计收入、累计已预扣税额、累计减除费用均归零重新起算；工资薪金不适用「断月重置」与 2025 年 10 月政策切换。
+  </div>
+
+  <div class="income-type-toggle">
+    <button class="income-type-btn active" data-income-type="labor">💼 劳务报酬（平台连续劳务）</button>
+    <button class="income-type-btn" data-income-type="salary">💰 工资薪金</button>
+  </div>
+
+  <div class="card" id="salary-params-card" style="display:none;">
+    <div class="card-title"><span class="icon" style="background:rgba(116,185,255,0.15);">⚙️</span> 工资薪金参数（多月累计与批量计算共用）</div>
+    <div class="salary-params-grid">
+      <div class="sp-field"><label>社保基数（元/月）</label><input type="number" id="sp-social-base" min="0" step="0.01" placeholder="如 10000" oninput="readSalaryParams()"></div>
+      <div class="sp-field"><label>公积金基数（元/月）</label><input type="number" id="sp-fund-base" min="0" step="0.01" placeholder="留空跟随社保基数" oninput="readSalaryParams()"></div>
+      <div class="sp-field"><label>养老比例（%）</label><input type="number" id="sp-rate-pension" min="0" max="100" step="0.1" value="8" oninput="readSalaryParams()"></div>
+      <div class="sp-field"><label>医疗比例（%）</label><input type="number" id="sp-rate-medical" min="0" max="100" step="0.1" value="2" oninput="readSalaryParams()"></div>
+      <div class="sp-field"><label>失业比例（%）</label><input type="number" id="sp-rate-unemployment" min="0" max="100" step="0.1" value="0.5" oninput="readSalaryParams()"></div>
+      <div class="sp-field"><label>公积金比例（%）</label><input type="number" id="sp-rate-fund" min="0" max="100" step="0.1" value="12" oninput="readSalaryParams()"></div>
+      <div class="sp-field"><label>基数下限（选填）</label><input type="number" id="sp-base-lower" min="0" step="0.01" placeholder="如 4000" oninput="readSalaryParams()"></div>
+      <div class="sp-field"><label>基数上限（选填）</label><input type="number" id="sp-base-upper" min="0" step="0.01" placeholder="如 30000" oninput="readSalaryParams()"></div>
+      <div class="sp-field"><label>专项附加扣除（元/月）</label><input type="number" id="sp-extra-deduction" min="0" step="0.01" placeholder="如 1500" oninput="readSalaryParams()"></div>
+    </div>
+    <div style="font-size:13px;color:var(--text2);">每月三险一金合计（个人部分）：<strong id="sp-si-total" style="color:var(--blue);">¥0.00</strong>　<span style="font-size:12px;">批量计算时，行内「社保基数 / 公积金基数 / 三险一金」列优先于上述全局基数</span></div>
   </div>
 
   <!-- Tabs -->
@@ -678,7 +761,7 @@
         <button class="direction-btn" data-dir="reverse" data-target="multi">税后 → 税前</button>
       </div>
 
-      <div class="toggle-row">
+      <div class="toggle-row" id="multi-gap-row">
         <div>
           <div class="toggle-label">🔄 断月重置</div>
           <div class="toggle-hint">开启后，相邻月份如果中断超过1个月，累计自动归零重新起算</div>
@@ -717,12 +800,19 @@
       </div>
 
       <div style="margin-top:16px;">
-        <div class="info-box" style="margin-bottom:0;">
-          <strong>📋 表格格式要求：</strong><br>
+        <div class="info-box" id="batch-info-labor" style="margin-bottom:0;">
+          <strong>📋 表格格式要求（劳务报酬）：</strong><br>
           <strong>识别列（至少填一项）：</strong><strong>姓名</strong>、<strong>身份证号</strong>、<strong>电话</strong>、<strong>银行卡号</strong><br>
           <strong>数据列：</strong><strong>月份</strong>（支持 2024-01、2024/01、2024年1月、202401、1月、Excel日期序列号等格式）、<strong>金额</strong>（税前或税后收入）<br>
           <em>列顺序不限，系统自动识别。优先按身份证号识别人员，无身份证时综合姓名+电话+银行卡匹配。<br>
           如果只有1列数据，默认当作金额处理。CSV 文件支持 UTF-8 和 GBK 编码。</em>
+        </div>
+        <div class="info-box" id="batch-info-salary" style="margin-bottom:0;display:none;">
+          <strong>📋 表格格式要求（工资薪金）：</strong><br>
+          <strong>识别列（至少填一项）：</strong><strong>姓名</strong>、<strong>身份证号</strong>、<strong>电话</strong>、<strong>银行卡号</strong><br>
+          <strong>数据列：</strong><strong>月份</strong>、<strong>应发工资</strong>（或实发工资，按计算方向选择）<br>
+          <strong>可选列：</strong><strong>社保基数</strong>、<strong>公积金基数</strong>、<strong>三险一金</strong>（个人部分金额）、<strong>专项附加扣除</strong>——行内有值时优先使用，缺失时回退到上方「工资参数」中的全局设置<br>
+          <em>列顺序不限，系统自动识别，可在列映射界面手动调整。每人按月累计预扣，同月多笔合并计税，跨年自动重置，不适用断月重置。</em>
         </div>
       </div>
 
@@ -761,21 +851,46 @@ function getBracket(taxableIncome) {
 }
 
 /**
+ * 计税策略：
+ * labor  — 连续劳务报酬：收入×80% 计入累计，税后=税前−税；2025-10 前走旧政策（不扣税）
+ * salary — 工资薪金：收入100% 计入累计，每月减除含三险一金与专项附加，税后实发=应发−三险一金−税
+ */
+const TAX_STRATEGIES = {
+  labor: {
+    key: 'labor',
+    includedIncome: (income) => income * 0.8,
+    postTaxOf: (preTax, currentTax) => round2(preTax - currentTax),
+    supportsOldPolicy: true,
+    gapReset: true,
+  },
+  salary: {
+    key: 'salary',
+    includedIncome: (income) => income,
+    postTaxOf: (preTax, currentTax, ctx) => round2(preTax - ((ctx && ctx.socialInsurance) || 0) - currentTax),
+    supportsOldPolicy: false,
+    gapReset: false,
+  },
+};
+const DEFAULT_STRATEGY = TAX_STRATEGIES.labor;
+
+/**
  * 计算单笔预扣税额
  * @param {number} income 本次收入
  * @param {number} cumIncome 本次之前的累计收入
  * @param {number} cumDeduction 累计减除费用
  * @param {number} cumTax 已预扣税额
+ * @param {object} strategy 计税策略（默认劳务报酬）
+ * @param {object} ctx 策略上下文（salary: { socialInsurance, extraDeduction }）
  */
-function calcTaxForward(income, cumIncome = 0, cumDeduction = 5000, cumTax = 0) {
-  const withholdingIncome = income * 0.8;
+function calcTaxForward(income, cumIncome = 0, cumDeduction = 5000, cumTax = 0, strategy = DEFAULT_STRATEGY, ctx = {}) {
+  const withholdingIncome = strategy.includedIncome(income);
   const newCumIncome = cumIncome + withholdingIncome;
   const taxableIncome = Math.max(0, newCumIncome - cumDeduction);
   const bracket = getBracket(taxableIncome);
   const cumTaxDueRaw = taxableIncome * bracket.rate - bracket.quick;
   const cumTaxDue = Math.max(0, round2(cumTaxDueRaw));
   const currentTax = Math.max(0, round2(cumTaxDue - round2(cumTax)));
-  const postTax = round2(income - currentTax);
+  const postTax = strategy.postTaxOf(income, currentTax, ctx);
   return {
     preTax: income,
     withholdingIncome,
@@ -788,26 +903,30 @@ function calcTaxForward(income, cumIncome = 0, cumDeduction = 5000, cumTax = 0) 
     currentTax,
     postTax,
     effectiveRate: income > 0 ? currentTax / income : 0,
+    socialInsurance: (ctx && ctx.socialInsurance) || 0,
+    extraDeduction: (ctx && ctx.extraDeduction) || 0,
   };
 }
 
 /**
  * 反算：已知税后金额，求税前
  */
-function calcTaxReverse(postTaxTarget, cumIncome = 0, cumDeduction = 5000, cumTax = 0) {
+function calcTaxReverse(postTaxTarget, cumIncome = 0, cumDeduction = 5000, cumTax = 0, strategy = DEFAULT_STRATEGY, ctx = {}) {
   // Binary search for preTax
   // Upper bound: at 45% tax rate, preTax ≈ postTax / 0.55, add generous margin
+  // （salary 的三险一金不随税前变化，一并计入上界）
+  const si = (ctx && ctx.socialInsurance) || 0;
   let lo = 0;
-  let hi = Math.max(postTaxTarget * 3, postTaxTarget + 500000);
+  let hi = (postTaxTarget + si) * 3 + 500000;
 
   // Quick check: if postTaxTarget is 0 or negative
   if (postTaxTarget <= 0) {
-    return calcTaxForward(0, cumIncome, cumDeduction, cumTax);
+    return calcTaxForward(0, cumIncome, cumDeduction, cumTax, strategy, ctx);
   }
 
   for (let i = 0; i < 80; i++) {
     const mid = (lo + hi) / 2;
-    const r = calcTaxForward(mid, cumIncome, cumDeduction, cumTax);
+    const r = calcTaxForward(mid, cumIncome, cumDeduction, cumTax, strategy, ctx);
     if (r.postTax > postTaxTarget) {
       hi = mid;
     } else {
@@ -823,7 +942,7 @@ function calcTaxReverse(postTaxTarget, cumIncome = 0, cumDeduction = 5000, cumTa
   for (let k = -5; k <= 5; k++) {
     const candidate = Math.round((center + k * 0.01) * 100) / 100;
     if (candidate <= 0) continue;
-    const r = calcTaxForward(candidate, cumIncome, cumDeduction, cumTax);
+    const r = calcTaxForward(candidate, cumIncome, cumDeduction, cumTax, strategy, ctx);
     const diff = Math.abs(r.postTax - postTaxTarget);
     if (
       !best ||
@@ -833,7 +952,7 @@ function calcTaxReverse(postTaxTarget, cumIncome = 0, cumDeduction = 5000, cumTa
       best = { r, diff };
     }
   }
-  return best ? best.r : calcTaxForward(center, cumIncome, cumDeduction, cumTax);
+  return best ? best.r : calcTaxForward(center, cumIncome, cumDeduction, cumTax, strategy, ctx);
 }
 
 // ==================== 旧政策（按次预扣） ====================
@@ -934,6 +1053,107 @@ var multiDirection = 'forward';
 var batchDirection = 'forward';
 var batchGapReset = true;
 
+/* 所得类型：'labor' 劳务报酬 | 'salary' 工资薪金 */
+var incomeType = 'labor';
+
+/* 工资薪金参数（多月累计与批量计算共用；比例以小数存储，UI 按百分数输入） */
+var salaryParams = {
+  socialBase: 0,      // 社保基数（元/月）；0 = 未设置
+  fundBase: '',       // 公积金基数；'' = 跟随社保基数
+  ratePension: 0.08,
+  rateMedical: 0.02,
+  rateUnemployment: 0.005,
+  rateFund: 0.12,
+  baseLower: '',      // 基数下限（选填）
+  baseUpper: '',      // 基数上限（选填）
+  extraDeduction: 0,  // 专项附加扣除（元/月）
+};
+
+/**
+ * 按基数上下限对基数做 clamp；基数为 0/缺失时返回 0（由调用方决定兜底）
+ */
+function clampSalaryBase(base) {
+  let b = Number(base) || 0;
+  if (b <= 0) return 0;
+  const lo = parseFloat(salaryParams.baseLower);
+  const hi = parseFloat(salaryParams.baseUpper);
+  if (salaryParams.baseLower !== '' && salaryParams.baseLower != null && isFinite(lo)) b = Math.max(b, lo);
+  if (salaryParams.baseUpper !== '' && salaryParams.baseUpper != null && isFinite(hi) && hi > 0) b = Math.min(b, hi);
+  return b;
+}
+
+/**
+ * 三险一金个人部分（月）= 社保基数×(养老+医疗+失业) + 公积金基数×公积金比例
+ * @param {number} socialBase 社保基数；0/空 表示无三险一金
+ * @param {number|string} fundBase 公积金基数；空则跟随社保基数
+ */
+function computeSocialInsurance(socialBase, fundBase) {
+  const sb = clampSalaryBase(socialBase);
+  const rawFund = (fundBase === '' || fundBase == null || isNaN(parseFloat(fundBase))) ? socialBase : fundBase;
+  const fb = clampSalaryBase(rawFund);
+  const social = sb * (salaryParams.ratePension + salaryParams.rateMedical + salaryParams.rateUnemployment);
+  const fund = fb * salaryParams.rateFund;
+  return round2(social + fund);
+}
+
+// ==================== Income type & salary params ====================
+
+document.querySelectorAll('.income-type-btn').forEach(btn => {
+  btn.addEventListener('click', () => setIncomeType(btn.dataset.incomeType));
+});
+
+function setIncomeType(type) {
+  if (type !== 'labor' && type !== 'salary') return;
+  incomeType = type;
+  document.querySelectorAll('.income-type-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.incomeType === type));
+  const showSalary = type === 'salary';
+  const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+  show('salary-params-card', showSalary);
+  show('info-labor', !showSalary);
+  show('info-salary', showSalary);
+  show('batch-info-labor', !showSalary);
+  show('batch-info-salary', showSalary);
+  show('multi-gap-row', !showSalary);   // 断月重置不适用于工资薪金
+  updateMultiInputHints();
+}
+
+/**
+ * 从「工资参数」读取输入到 salaryParams；非法输入标红并保留上一次合法值
+ * @returns {boolean} 是否全部合法
+ */
+function readSalaryParams() {
+  let ok = true;
+  const readNum = (id, min, max) => {
+    const el = document.getElementById(id);
+    if (!el) return '';
+    const raw = String(el.value).trim();
+    if (raw === '') { el.classList.remove('input-error'); return ''; }
+    const v = parseFloat(raw);
+    if (!isFinite(v) || v < min || v > max) { el.classList.add('input-error'); ok = false; return ''; }
+    el.classList.remove('input-error');
+    return v;
+  };
+  const base = readNum('sp-social-base', 0, Infinity);
+  if (base !== '') salaryParams.socialBase = base;
+  salaryParams.fundBase = readNum('sp-fund-base', 0, Infinity);
+  const pension = readNum('sp-rate-pension', 0, 100);
+  if (pension !== '') salaryParams.ratePension = pension / 100;
+  const medical = readNum('sp-rate-medical', 0, 100);
+  if (medical !== '') salaryParams.rateMedical = medical / 100;
+  const unemployment = readNum('sp-rate-unemployment', 0, 100);
+  if (unemployment !== '') salaryParams.rateUnemployment = unemployment / 100;
+  const fundRate = readNum('sp-rate-fund', 0, 100);
+  if (fundRate !== '') salaryParams.rateFund = fundRate / 100;
+  salaryParams.baseLower = readNum('sp-base-lower', 0, Infinity);
+  salaryParams.baseUpper = readNum('sp-base-upper', 0, Infinity);
+  const extra = readNum('sp-extra-deduction', 0, Infinity);
+  if (extra !== '') salaryParams.extraDeduction = extra;
+  const totalEl = document.getElementById('sp-si-total');
+  if (totalEl) totalEl.textContent = '¥' + formatNum(computeSocialInsurance(salaryParams.socialBase, salaryParams.fundBase));
+  return ok;
+}
+
 // ==================== Tabs ====================
 
 document.querySelectorAll('.tab').forEach(tab => {
@@ -997,19 +1217,26 @@ function onMonthAmountInput(input) {
   }
 }
 
-/* 根据计算方向更新输入提示 */
+/* 根据计算方向与所得类型更新输入提示 */
 function updateMultiInputHints() {
   const isReverse = multiDirection === 'reverse';
-  const placeholder = isReverse ? '税后金额' : '税前金额';
+  const isSalary = incomeType === 'salary';
+  const placeholder = isSalary
+    ? (isReverse ? '期望实发' : '应发工资')
+    : (isReverse ? '税后金额' : '税前金额');
   for (let m = 1; m <= 12; m++) {
     const input = document.getElementById('m-amount-' + m);
     if (input) input.placeholder = placeholder;
   }
   const hintEl = document.getElementById('multi-input-hint');
   if (hintEl) {
-    hintEl.textContent = isReverse
-      ? '输入每月期望税后收入，系统反算所需税前收入。留空的月份自动跳过。'
-      : '输入每月税前收入，留空的月份自动跳过。断月重置会检测跳过的月份间隔。';
+    hintEl.textContent = isSalary
+      ? (isReverse
+        ? '输入每月期望实发工资，系统反算所需应发工资。留空的月份自动跳过。'
+        : '输入每月应发工资（税前），系统按「工资参数」计算三险一金与个税。留空的月份自动跳过。')
+      : (isReverse
+        ? '输入每月期望税后收入，系统反算所需税前收入。留空的月份自动跳过。'
+        : '输入每月税前收入，留空的月份自动跳过。断月重置会检测跳过的月份间隔。');
   }
 }
 
@@ -1041,11 +1268,33 @@ function calcMulti() {
   const results = [];
   let lastMonth = '';
 
+  const isSalary = incomeType === 'salary';
+  const salarySI = isSalary ? computeSocialInsurance(salaryParams.socialBase, salaryParams.fundBase) : 0;
+  const salaryExtra = isSalary ? Math.max(0, Number(salaryParams.extraDeduction) || 0) : 0;
+  const salaryCtx = { socialInsurance: salarySI, extraDeduction: salaryExtra };
+
   data.forEach(d => {
-    // 判断是否适用新政策
-    const useNewPolicy = isNewPolicy(d.month);
-    
-    if (useNewPolicy) {
+    if (isSalary) {
+      /* 工资薪金：始终累计预扣；每月减除 = 5000 + 三险一金 + 专项附加（同月只计一次） */
+      if (d.month !== lastMonth) {
+        lastMonth = d.month;
+        cumDeduction += 5000 + salarySI + salaryExtra;
+      }
+
+      const r = multiDirection === 'forward'
+        ? calcTaxForward(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx)
+        : calcTaxReverse(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx);
+
+      cumIncome = r.cumIncome;
+      cumTax = r.cumTaxDue;
+
+      results.push({
+        ...d,
+        ...r,
+        _isGap: false,
+        _isOldPolicy: false
+      });
+    } else if (isNewPolicy(d.month)) {
       // 新政策：累计预扣
       // 断月重置：与上一有数据的月份间隔 >1 个月则重新起算
       let isGap = false;
@@ -1122,13 +1371,23 @@ function renderMultiResults(results) {
   const container = document.getElementById('multi-result');
   container.style.display = '';
 
+  const isSalary = incomeType === 'salary';
   const totalPre = results.reduce((s, r) => s + r.preTax, 0);
   const totalTax = results.reduce((s, r) => s + r.currentTax, 0);
   const totalPost = results.reduce((s, r) => s + r.postTax, 0);
+  const totalSI = results.reduce((s, r) => s + (r.socialInsurance || 0), 0);
+  const totalExtra = results.reduce((s, r) => s + (r.extraDeduction || 0), 0);
   const avgRate = totalPre > 0 ? totalTax / totalPre : 0;
-  const multiDirLabel = multiDirection === 'forward'
-    ? '税前收入 → 税后收入'
-    : '税后收入 → 税前收入';
+  const multiDirLabel = isSalary
+    ? (multiDirection === 'forward' ? '应发工资 → 实发工资' : '实发工资 → 应发工资')
+    : (multiDirection === 'forward' ? '税前收入 → 税后收入' : '税后收入 → 税前收入');
+  const inLabel = isSalary
+    ? (multiDirection === 'forward' ? '应发工资' : '期望实发（已知）')
+    : (multiDirection === 'forward' ? '税前收入' : '税后收入（已知）');
+  const outLabel = isSalary
+    ? (multiDirection === 'forward' ? '实发工资' : '应发工资（反算）')
+    : (multiDirection === 'forward' ? '税后收入' : '税前收入（反算）');
+  const colCount = isSalary ? 11 : 10;
 
   // 按年分组
   const yearGroups = {};
@@ -1146,7 +1405,7 @@ function renderMultiResults(results) {
     const yRows = yearGroups[yr];
     // 跨年分隔
     if (yi > 0) {
-      tbodyHTML += `<tr style="background:rgba(108,92,231,0.12);"><td colspan="10" style="text-align:center;padding:10px;font-weight:700;color:var(--accent2);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`;
+      tbodyHTML += `<tr style="background:rgba(108,92,231,0.12);"><td colspan="${colCount}" style="text-align:center;padding:10px;font-weight:700;color:var(--accent2);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`;
     }
     // 年度小计变量
     let yPre = 0, yTax = 0, yPost = 0;
@@ -1154,24 +1413,26 @@ function renderMultiResults(results) {
       seq++;
       // 断月标记
       if (r._isGap) {
-        tbodyHTML += `<tr style="background:rgba(253,114,114,0.1);"><td colspan="10" style="text-align:center;padding:8px;font-weight:600;color:var(--red);font-size:12px;">⚠️ 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`;
+        tbodyHTML += `<tr style="background:rgba(253,114,114,0.1);"><td colspan="${colCount}" style="text-align:center;padding:8px;font-weight:600;color:var(--red);font-size:12px;">⚠️ 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`;
       }
       // 旧政策标记
       if (r._isOldPolicy) {
-        tbodyHTML += `<tr style="background:rgba(253,203,110,0.1);"><td colspan="10" style="text-align:center;padding:8px;font-weight:600;color:var(--orange);font-size:12px;">📅 旧政策：${r.month} 按生产经营所得计算，不扣税（2025年10月1日前）</td></tr>`;
+        tbodyHTML += `<tr style="background:rgba(253,203,110,0.1);"><td colspan="${colCount}" style="text-align:center;padding:8px;font-weight:600;color:var(--orange);font-size:12px;">📅 旧政策：${r.month} 按生产经营所得计算，不扣税（2025年10月1日前）</td></tr>`;
       }
       tbodyHTML += `
         <tr>
           <td>${r.month}</td>
           <td class="label-col">${r.note}</td>
           <td>¥${formatNum(multiDirection === 'forward' ? r.preTax : r.postTax)}</td>
-          <td>¥${formatNum(r.withholdingIncome)}</td>
+          ${isSalary
+            ? `<td>¥${formatNum(r.socialInsurance)}</td><td>¥${formatNum(r.extraDeduction)}</td>`
+            : `<td>¥${formatNum(r.withholdingIncome)}</td>`}
           <td>¥${formatNum(r.cumIncome)}</td>
           <td>¥${formatNum(r.taxableIncome)}</td>
           <td>${(r.rate * 100)}%</td>
           <td class="tax-col">¥${formatNum(r.currentTax)}</td>
           <td class="highlight">¥${formatNum(multiDirection === 'forward' ? r.postTax : r.preTax)}</td>
-          <td>${r._isOldPolicy ? '旧政策' : '新政策'}</td>
+          <td>${isSalary ? '累计预扣' : (r._isOldPolicy ? '旧政策' : '新政策')}</td>
         </tr>`;
       yPre += r.preTax; yTax += r.currentTax; yPost += r.postTax;
     });
@@ -1179,7 +1440,9 @@ function renderMultiResults(results) {
     if (years.length > 1) {
       tbodyHTML += `<tr style="background:var(--surface2);font-weight:600;">
         <td colspan="2" style="text-align:right;color:var(--text2);">${yr} 年小计</td>
-        <td>¥${formatNum(multiDirection === 'forward' ? yPre : yPost)}</td><td></td><td></td><td></td><td></td>
+        <td>¥${formatNum(multiDirection === 'forward' ? yPre : yPost)}</td>
+        ${isSalary ? '<td></td><td></td>' : '<td></td>'}
+        <td></td><td></td><td></td>
         <td class="tax-col">¥${formatNum(yTax)}</td>
         <td class="highlight">¥${formatNum(multiDirection === 'forward' ? yPost : yPre)}</td>
         <td></td>
@@ -1190,7 +1453,7 @@ function renderMultiResults(results) {
   container.innerHTML = `
     <div class="summary-grid">
       <div class="summary-item">
-        <div class="label">累计税前</div>
+        <div class="label">${isSalary ? '累计应发' : '累计税前'}</div>
         <div class="value blue">¥${formatNum(totalPre)}</div>
       </div>
       <div class="summary-item">
@@ -1198,7 +1461,7 @@ function renderMultiResults(results) {
         <div class="value red">¥${formatNum(totalTax)}</div>
       </div>
       <div class="summary-item">
-        <div class="label">累计税后</div>
+        <div class="label">${isSalary ? '累计实发' : '累计税后'}</div>
         <div class="value green">¥${formatNum(totalPost)}</div>
       </div>
       <div class="summary-item">
@@ -1221,13 +1484,13 @@ function renderMultiResults(results) {
             <tr>
               <th>月份</th>
               <th>备注</th>
-              <th>${multiDirection === 'forward' ? '税前收入' : '税后收入（已知）'}</th>
-              <th>本次预扣收入额</th>
+              <th>${inLabel}</th>
+              ${isSalary ? '<th>三险一金(个人)</th><th>专项附加</th>' : '<th>本次预扣收入额</th>'}
               <th>累计发放金额</th>
               <th>累计应纳税所得额</th>
               <th>适用税率</th>
               <th>本期预扣税额</th>
-              <th>${multiDirection === 'forward' ? '税后收入' : '税前收入（反算）'}</th>
+              <th>${outLabel}</th>
               <th>政策类型</th>
             </tr>
           </thead>
@@ -1236,7 +1499,10 @@ function renderMultiResults(results) {
             <tr class="total-row">
               <td colspan="2">合计</td>
               <td>¥${formatNum(multiDirection === 'forward' ? totalPre : totalPost)}</td>
-              <td>¥${formatNum(results.reduce((s,r) => s + r.withholdingIncome, 0))}</td>
+              ${isSalary
+                ? `<td>¥${formatNum(totalSI)}</td><td>¥${formatNum(totalExtra)}</td>`
+                : `<td>¥${formatNum(results.reduce((s,r) => s + r.withholdingIncome, 0))}</td>`}
+              <td></td>
               <td></td>
               <td></td>
               <td class="tax-col">¥${formatNum(totalTax)}</td>
@@ -1256,12 +1522,25 @@ function renderMultiResults(results) {
 function exportMultiCSV() {
   if (!window._multiResults) return;
   const results = window._multiResults;
-  const preLabel = multiDirection === 'forward' ? '税前收入' : '税后收入（已知）';
-  const postLabel = multiDirection === 'forward' ? '税后收入' : '税前收入（反算）';
-  const header = `月份,备注,${preLabel},本次预扣收入额,累计发放金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},政策类型\n`;
-  const rows = results.map(r =>
-    `${r.month},${r.note},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},${r._isOldPolicy ? '旧政策' : '新政策'}`
-  ).join('\n');
+  const isSalary = incomeType === 'salary';
+  const preLabel = isSalary
+    ? (multiDirection === 'forward' ? '应发工资' : '期望实发（已知）')
+    : (multiDirection === 'forward' ? '税前收入' : '税后收入（已知）');
+  const postLabel = isSalary
+    ? (multiDirection === 'forward' ? '实发工资' : '应发工资（反算）')
+    : (multiDirection === 'forward' ? '税后收入' : '税前收入（反算）');
+  let header, rows;
+  if (isSalary) {
+    header = `月份,备注,${preLabel},三险一金(个人),专项附加扣除,累计发放金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},计税方式\n`;
+    rows = results.map(r =>
+      `${r.month},${r.note},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.socialInsurance || 0)},${round2(r.extraDeduction || 0)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},累计预扣`
+    ).join('\n');
+  } else {
+    header = `月份,备注,${preLabel},本次预扣收入额,累计发放金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},政策类型\n`;
+    rows = results.map(r =>
+      `${r.month},${r.note},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},${r._isOldPolicy ? '旧政策' : '新政策'}`
+    ).join('\n');
+  }
   downloadFile(header + rows, '多月个税计算结果.csv', 'text/csv');
 }
 
@@ -1782,7 +2061,7 @@ function isAmountLikeNumber(value) {
 }
 
 function isAmountHeaderExcluded(header) {
-  return /方式|类型|选择|状态|税源地|开户|账号|账户|手机号|电话|身份证|证件|银行|备注|说明|业务/.test(header);
+  return /方式|类型|选择|状态|税源地|开户|账号|账户|手机号|电话|身份证|证件|银行|备注|说明|业务|三险一金|五险一金|社保|公积金|专项附加|基数/.test(header);
 }
 
 function getAmountColumnScore(header, dataRows, ci) {
@@ -1790,11 +2069,12 @@ function getAmountColumnScore(header, dataRows, ci) {
   if (!headerText || isAmountHeaderExcluded(headerText)) return -Infinity;
 
   let score = 0;
-  if (/应发金额|实发金额|客户支付合计|税前收入|税后收入|发放金额|报酬/i.test(headerText)) score += 9;
+  if (/应发金额|实发金额|应发工资|实发工资|客户支付合计|税前收入|税后收入|发放金额|报酬|工资|月薪/i.test(headerText)) score += 9;
   else if (/金额|amount|收入额|合计金额|应付金额/i.test(headerText)) score += 6;
   else if (/累计收入/i.test(headerText)) score += 3;
   if (/含税|应付|收入|pay|income/i.test(headerText)) score += 2;
   if (/发放方式|服务费率|税源地/i.test(headerText)) score -= 10;
+  if (/三险一金|五险一金|社保|公积金|专项附加|基数/i.test(headerText)) score -= 10;
 
   const sampleRows = dataRows.slice(0, 12);
   if (!sampleRows.length) return score;
@@ -1996,10 +2276,42 @@ const COL_KEYWORDS = [
   {
     type: 'amount',
     patterns: [
-      /^(金额|amount|收入|income|报酬|pay|实发金额?|税前收入?|税后收入?|应发金额?|应付金额?|客户支付合计|累计收入|收入额|发放金额|合计金额|服务预算|付款金额|计划发放收入)$/i,
-      /金额|amount|收入|income|报酬|pay|实发|税前|税后|应发|应付|发放|合计|预算|付款/i
+      /^(金额|amount|收入|income|报酬|pay|实发金额?|税前收入?|税后收入?|应发金额?|应付金额?|应发工资|实发工资|工资|月薪|基本工资|客户支付合计|累计收入|收入额|发放金额|合计金额|服务预算|付款金额|计划发放收入)$/i,
+      /金额|amount|收入|income|报酬|pay|实发|税前|税后|应发|应付|工资|月薪|发放|合计|预算|付款/i
     ],
     exclude: null
+  },
+  {
+    type: 'socialBase',
+    patterns: [
+      /^(社保基数|社保缴费基数|社保缴费工资基数|社会保险基数|缴费工资基数)$/i,
+      /社保.{0,6}基数|社会保险.{0,6}基数|缴费(工资)?基数/i
+    ],
+    exclude: /公积金/i
+  },
+  {
+    type: 'fundBase',
+    patterns: [
+      /^(公积金基数|公积金缴费基数|住房公积金基数|公积金缴费工资基数)$/i,
+      /公积金.{0,6}基数|住房公积金.{0,6}基数/i
+    ],
+    exclude: null
+  },
+  {
+    type: 'socialInsurance',
+    patterns: [
+      /^(三险一金|五险一金|专项扣除|社保扣款|社保扣费|社保费用|社保个人部分|个人社保|公积金扣款|社保公积金)$/i,
+      /(三险一金|五险一金|专项扣除)|社保.{0,4}(扣|个人|费用)|公积金.{0,4}(扣款|个人|费用)/i
+    ],
+    exclude: /专项附加|基数/i
+  },
+  {
+    type: 'extraDeduction',
+    patterns: [
+      /^(专项附加扣除|专项附加|附加扣除)$/i,
+      /专项附加|附加扣除/i
+    ],
+    exclude: /社保|公积金|三险|五险/i
   },
   {
     type: 'idCard',
@@ -2048,6 +2360,10 @@ const COL_TYPE_LABELS = {
   name:      '👤 姓名',
   month:     '📅 月份',
   amount:    '💰 金额',
+  socialBase:     '🧮 社保基数',
+  fundBase:       '🏠 公积金基数',
+  socialInsurance:'🛡️ 三险一金(个人)',
+  extraDeduction: '➕ 专项附加扣除',
   idCard:    '🪪 身份证',
   phone:     '📱 电话',
   bankName:  '🏦 开户银行',
@@ -2362,10 +2678,10 @@ function showColumnMappingUI(rawRows, headerRow, headerRowIndex, dataRows, filen
         <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text);">💰 金额类型</div>
         <div style="display:flex;gap:16px;">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text);">
-            <input type="radio" name="amount-type" value="preTax" checked style="accent-color:var(--accent);"> 税前收入（将用累计预扣法计算个税）
+            <input type="radio" name="amount-type" value="preTax" checked style="accent-color:var(--accent);"> ${incomeType === 'salary' ? '应发工资（将用累计预扣法计算个税）' : '税前收入（将用累计预扣法计算个税）'}
           </label>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text);">
-            <input type="radio" name="amount-type" value="postTax" style="accent-color:var(--accent);"> 税后收入（将反算税前金额）
+            <input type="radio" name="amount-type" value="postTax" style="accent-color:var(--accent);"> ${incomeType === 'salary' ? '实发工资（将反算应发工资）' : '税后收入（将反算税前金额）'}
           </label>
         </div>
       </div>
@@ -2510,7 +2826,16 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
     rows.forEach(row => {
       if (isSummaryLikeRow(row)) return;
       let month = '', amount = 0, name = '默认', idCard = '', phone = '', bankCard = '';
+      let socialBase = '', fundBase = '', socialInsuranceAmt = '', extraDeduction = '';
       const monthHint = row._sheetMonthHint || '';
+
+      // 金额类单元格：空值保留 ''（区别于显式 0），供行内值优先/全局兜底判断
+      const readAmt = (ci) => {
+        const v = String(row[ci] == null ? '' : row[ci]).trim();
+        if (v === '') return '';
+        const num = parseAmount(v);
+        return isNaN(num) ? '' : num;
+      };
 
       if (rowColMap.name != null) name = String(row[rowColMap.name] || '').trim();
       if (rowColMap.month != null) month = normalizeMonthWithHint(String(row[rowColMap.month] || ''), monthHint);
@@ -2518,6 +2843,10 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
       if (rowColMap.idCard != null) idCard = sanitizeIdCard(row[rowColMap.idCard]);
       if (rowColMap.phone != null) phone = sanitizePhone(row[rowColMap.phone]);
       if (rowColMap.bankCard != null) bankCard = sanitizeBankCard(row[rowColMap.bankCard]);
+      if (rowColMap.socialBase != null) socialBase = readAmt(rowColMap.socialBase);
+      if (rowColMap.fundBase != null) fundBase = readAmt(rowColMap.fundBase);
+      if (rowColMap.socialInsurance != null) socialInsuranceAmt = readAmt(rowColMap.socialInsurance);
+      if (rowColMap.extraDeduction != null) extraDeduction = readAmt(rowColMap.extraDeduction);
       if ((!month || month === '-') && monthHint) month = monthHint;
       name = sanitizeName(name) || '默认';
 
@@ -2550,6 +2879,10 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
           monthRaw,
           sortTime: extractSortDateTime(monthRaw),
           amount,
+          socialBase,
+          fundBase,
+          socialInsuranceAmt,
+          extraDeduction,
           person: name,
           idCard,
           phone,
@@ -2948,11 +3281,12 @@ function showBatchPreview(parsed, personKeys, personsMap, filename) {
 
       <!-- 选择方向并计算 -->
       <div style="background:var(--surface2);border-radius:8px;padding:20px;border:1px solid var(--border);">
-        <div style="font-size:14px;font-weight:600;margin-bottom:14px;color:var(--text);">⚡ 选择计算方式</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:14px;color:var(--text);">⚡ 选择计算方式${incomeType === 'salary' ? '（工资薪金 · 累计预扣）' : ''}</div>
         <div class="direction-toggle" style="margin-bottom:16px;">
-          <button class="direction-btn active" data-dir="forward" data-target="batch">税前 → 税后</button>
-          <button class="direction-btn" data-dir="reverse" data-target="batch">税后 → 税前</button>
+          <button class="direction-btn active" data-dir="forward" data-target="batch">${incomeType === 'salary' ? '应发 → 实发' : '税前 → 税后'}</button>
+          <button class="direction-btn" data-dir="reverse" data-target="batch">${incomeType === 'salary' ? '实发 → 应发' : '税后 → 税前'}</button>
         </div>
+        ${incomeType === 'labor' ? `
         <div class="toggle-row" style="margin-bottom:16px;">
           <div>
             <div class="toggle-label">🔄 断月重置</div>
@@ -2962,7 +3296,7 @@ function showBatchPreview(parsed, personKeys, personsMap, filename) {
             <input type="checkbox" checked onclick="batchGapReset=this.checked;">
             <span class="slider"></span>
           </label>
-        </div>
+        </div>` : `<div style="font-size:12px;color:var(--text2);margin-bottom:16px;">三险一金与专项附加扣除按行内列（如有）与「工资参数」全局设置自动取值。</div>`}
         <button class="btn btn-primary" onclick="runBatchCalc()" style="width:100%;padding:12px;font-size:15px;">🚀 开始计算</button>
       </div>
     </div>
@@ -3020,10 +3354,69 @@ function runBatchCalc() {
     let lastYear = '';
 
     records.forEach(d => {
-      // 判断是否适用新政策
-      const useNewPolicy = isNewPolicy(d.month);
-      
-      if (useNewPolicy) {
+      if (incomeType === 'salary') {
+        /* 工资薪金：始终累计预扣，不适用旧政策与断月重置 */
+        const curYear = d.month && d.month !== '-' ? d.month.split('-')[0] : '';
+        if (curYear && curYear !== lastYear) {
+          if (lastYear !== '') {
+            cumIncome = 0;
+            cumTax = 0;
+            cumDeduction = 0;
+            lastMonth = '';
+          }
+          lastYear = curYear;
+        }
+
+        /* 三险一金：行内金额 > 行内基数×全局比例 > 全局基数×比例（全缺为 0 并标注） */
+        let si;
+        const hasRowSIAmt = d.socialInsuranceAmt !== '' && d.socialInsuranceAmt != null;
+        const hasRowBase = d.socialBase !== '' && d.socialBase != null && d.socialBase > 0;
+        if (hasRowSIAmt) {
+          si = d.socialInsuranceAmt;
+        } else if (hasRowBase) {
+          const fund = (d.fundBase !== '' && d.fundBase != null) ? d.fundBase : d.socialBase;
+          si = computeSocialInsurance(d.socialBase, fund);
+        } else {
+          si = computeSocialInsurance(salaryParams.socialBase, salaryParams.fundBase);
+        }
+        si = round2(Math.max(0, Number(si) || 0));
+        const siMissing = !hasRowSIAmt && !hasRowBase && !(salaryParams.socialBase > 0);
+
+        const extra = (d.extraDeduction !== '' && d.extraDeduction != null)
+          ? Math.max(0, Number(d.extraDeduction) || 0)
+          : Math.max(0, Number(salaryParams.extraDeduction) || 0);
+
+        /* 同月多笔合并：减除费用与三险一金同月只计一次；无月份的记录各自独立起算。
+           实发口径下，当月三险一金只从首笔记录中扣减，后续记录不再重复扣。 */
+        const hasMonth = d.month && d.month !== '-';
+        const isFirstOfMonth = !hasMonth || d.month !== lastMonth;
+        if (isFirstOfMonth) {
+          lastMonth = d.month || '';
+          cumDeduction += 5000 + si + extra;
+        }
+
+        const salaryCtx = { socialInsurance: isFirstOfMonth ? si : 0, extraDeduction: isFirstOfMonth ? extra : 0 };
+        let r;
+        if (batchDirection === 'forward') {
+          r = calcTaxForward(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx);
+        } else {
+          r = calcTaxReverse(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx);
+        }
+        cumIncome = r.cumIncome;
+        cumTax = r.cumTaxDue;
+
+        allResults.push({
+          person: group.name,
+          idCard: d.idCard || group.idCard,
+          phone: d.phone || group.phone,
+          bankCard: d.bankCard || group.bankCard,
+          ...d,
+          ...r,
+          _isGap: false,
+          _isOldPolicy: false,
+          _siMissing: siMissing
+        });
+      } else if (isNewPolicy(d.month)) {
         // 新政策：累计预扣
         const parts = d.month.split('-');
         const curYear = parts.length >= 2 ? parts[0] : '';
@@ -3115,11 +3508,16 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
   const totalTax = results.reduce((s, r) => s + r.currentTax, 0);
   const totalPost = results.reduce((s, r) => s + r.postTax, 0);
 
-  const directionLabel = batchDirection === 'forward'
-    ? '税前收入 → 税后收入'
-    : '税后收入 → 税前收入';
-  const preColLabel = batchDirection === 'forward' ? '税前收入' : '税后收入（已知）';
-  const postColLabel = batchDirection === 'forward' ? '税后收入' : '税前收入（反算）';
+  const isSalary = incomeType === 'salary';
+  const directionLabel = isSalary
+    ? (batchDirection === 'forward' ? '应发工资 → 实发工资' : '实发工资 → 应发工资')
+    : (batchDirection === 'forward' ? '税前收入 → 税后收入' : '税后收入 → 税前收入');
+  const preColLabel = isSalary
+    ? (batchDirection === 'forward' ? '应发工资' : '实发工资（已知）')
+    : (batchDirection === 'forward' ? '税前收入' : '税后收入（已知）');
+  const postColLabel = isSalary
+    ? (batchDirection === 'forward' ? '实发工资' : '应发工资（反算）')
+    : (batchDirection === 'forward' ? '税后收入' : '税前收入（反算）');
 
   const { hasIdCard, hasPhone, hasBankCard } = identityFlags || {};
 
@@ -3169,7 +3567,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
     let yearSections = '';
     years.forEach((yr, yi) => {
       const yRows = yearGroups[yr];
-      const gapColspan = 8 + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
+      const gapColspan = (isSalary ? 10 : 8) + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
       const yearSep = yi > 0
         ? `<tr style="background:rgba(108,92,231,0.12);"><td colspan="${gapColspan}" style="text-align:center;padding:10px;font-weight:700;color:var(--accent2);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`
         : '';
@@ -3195,11 +3593,12 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
             <td>${r.month}</td>
             ${extraCols}
             <td>¥${formatNum(batchDirection === 'forward' ? r.preTax : r.postTax)}</td>
+            ${isSalary ? `<td${r._siMissing ? ' style="color:var(--orange);" title="行内与全局均未设置社保基数，三险一金按 0 计算"' : ''}>¥${formatNum(r.socialInsurance || 0)}${r._siMissing ? ' ⚠' : ''}</td><td>¥${formatNum(r.extraDeduction || 0)}</td>` : ''}
             <td>¥${formatNum(r.cumIncome)}</td>
             <td>${(r.rate * 100)}%</td>
             <td class="tax-col">¥${formatNum(r.currentTax)}</td>
             <td class="highlight">¥${formatNum(batchDirection === 'forward' ? r.postTax : r.preTax)}</td>
-            <td>${r._isOldPolicy ? '旧政策' : '新政策'}</td>
+            <td>${isSalary ? '累计预扣' : (r._isOldPolicy ? '旧政策' : '新政策')}</td>
           </tr>`;
       }).join('');
 
@@ -3224,11 +3623,12 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
                 <th>月份</th>
                 ${extraHeadCols}
                 <th>${preColLabel}</th>
-                <th>累计发放金额</th>
+                ${isSalary ? '<th>三险一金(个人)</th><th>专项附加</th>' : ''}
+                <th>${isSalary ? '累计应发金额' : '累计发放金额'}</th>
                 <th>适用税率</th>
                 <th>预扣税额</th>
                 <th>${postColLabel}</th>
-                <th>政策类型</th>
+                <th>${isSalary ? '计税方式' : '政策类型'}</th>
               </tr>
             </thead>
             <tbody>
@@ -3236,6 +3636,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
               <tr class="total-row">
                 <td colspan="${totalColspan}">小计</td>
                 <td>¥${formatNum(batchDirection === 'forward' ? personPre : personPost)}</td>
+                ${isSalary ? `<td>¥${formatNum(rows.reduce((s, r) => s + (r.socialInsurance || 0), 0))}</td><td>¥${formatNum(rows.reduce((s, r) => s + (r.extraDeduction || 0), 0))}</td>` : ''}
                 <td></td>
                 <td></td>
                 <td class="tax-col">¥${formatNum(personTax)}</td>
@@ -3263,7 +3664,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
         <div class="value red">¥${formatNum(totalTax)}</div>
       </div>
       <div class="summary-item">
-        <div class="label">累计税后</div>
+        <div class="label">${isSalary ? '累计实发' : '累计税后'}</div>
         <div class="value green">¥${formatNum(totalPost)}</div>
       </div>
     </div>
@@ -3285,8 +3686,13 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
 function exportBatchCSV() {
   if (!window._batchResults) return;
   const results = window._batchResults;
-  const preLabel = batchDirection === 'forward' ? '税前收入' : '税后收入（已知）';
-  const postLabel = batchDirection === 'forward' ? '税后收入' : '税前收入（反算）';
+  const isSalary = incomeType === 'salary';
+  const preLabel = isSalary
+    ? (batchDirection === 'forward' ? '应发工资' : '实发工资（已知）')
+    : (batchDirection === 'forward' ? '税前收入' : '税后收入（已知）');
+  const postLabel = isSalary
+    ? (batchDirection === 'forward' ? '实发工资' : '应发工资（反算）')
+    : (batchDirection === 'forward' ? '税后收入' : '税前收入（反算）');
 
   // 检测哪些身份列有数据
   const hasIdCard = results.some(r => r.idCard);
@@ -3305,14 +3711,24 @@ function exportBatchCSV() {
   if (hasIdCard) headerCols += ',身份证号';
   if (hasPhone) headerCols += ',电话';
   if (hasBankCard) headerCols += ',银行卡号';
-  headerCols += `,月份,${preLabel},本次预扣收入额,累计发放金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},政策类型`;
+  if (isSalary) {
+    headerCols += `,月份,${preLabel},三险一金(个人),专项附加扣除,累计应发金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},计税方式`;
+  } else {
+    headerCols += `,月份,${preLabel},本次预扣收入额,累计发放金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},政策类型`;
+  }
 
   const rows = sorted.map(r => {
     let cols = `"${r.person}"`;
     if (hasIdCard) cols += `,"${r.idCard || ''}"`;
     if (hasPhone) cols += `,"${r.phone || ''}"`;
     if (hasBankCard) cols += `,"${r.bankCard || ''}"`;
-    cols += `,"${r.month}",${round2(batchDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(batchDirection === 'forward' ? r.postTax : r.preTax)},${r._isOldPolicy ? '旧政策' : '新政策'}`;
+    const inAmt = round2(batchDirection === 'forward' ? r.preTax : r.postTax);
+    const outAmt = round2(batchDirection === 'forward' ? r.postTax : r.preTax);
+    if (isSalary) {
+      cols += `,"${r.month}",${inAmt},${round2(r.socialInsurance || 0)},${round2(r.extraDeduction || 0)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${outAmt},累计预扣${r._siMissing ? '(三险一金未设置)' : ''}`;
+    } else {
+      cols += `,"${r.month}",${inAmt},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${outAmt},${r._isOldPolicy ? '旧政策' : '新政策'}`;
+    }
     return cols;
   }).join('\n');
 
@@ -3320,8 +3736,13 @@ function exportBatchCSV() {
 }
 
 function downloadTemplate() {
-  const csv = '月份,金额,姓名,身份证号,电话,银行卡号\n2024年11月,15000,张三,110101199001011234,13800138000,6225880112345678\n2024/12,20000,张三,110101199001011234,13800138000,6225880112345678\n2025-01,18000,张三,110101199001011234,13800138000,6225880112345678\n2025-02,22000,张三,110101199001011234,13800138000,6225880112345678\n2024.11,8000,李四,,,6225880198765432\n2024.12,12000,李四,,,6225880198765432\n2025-01,9500,李四,,,6225880198765432';
-  downloadFile(csv, '个税计算模板.csv', 'text/csv');
+  if (incomeType === 'salary') {
+    const csv = '姓名,身份证号,月份,应发工资,社保基数,公积金基数,三险一金,专项附加扣除\n张三,110101199001011234,2026-01,10000,10000,10000,,1000\n张三,110101199001011234,2026-02,10000,10000,10000,,1000\n张三,110101199001011234,2026-03,12000,10000,,,1500\n李四,110101199202022345,2026-01,8000,6000,,,0\n李四,110101199202022345,2026-02,8000,6000,,,0';
+    downloadFile(csv, '工资薪金个税计算模板.csv', 'text/csv');
+  } else {
+    const csv = '月份,金额,姓名,身份证号,电话,银行卡号\n2024年11月,15000,张三,110101199001011234,13800138000,6225880112345678\n2024/12,20000,张三,110101199001011234,13800138000,6225880112345678\n2025-01,18000,张三,110101199001011234,13800138000,6225880112345678\n2025-02,22000,张三,110101199001011234,13800138000,6225880112345678\n2024.11,8000,李四,,,6225880198765432\n2024.12,12000,李四,,,6225880198765432\n2025-01,9500,李四,,,6225880198765432';
+    downloadFile(csv, '个税计算模板.csv', 'text/csv');
+  }
 }
 
 // ==================== Utils ====================
@@ -3409,8 +3830,92 @@ async function downloadFile(content, filename, type) {
   }
 }
 
+// ==================== Self tests ====================
+// 控制台自检：工资薪金累计预扣、反算、基数 clamp、劳务报酬回归。
+// 页面加载时自动运行，也可在控制台手动调用 runSelfTests() 查看明细。
+
+function runSelfTests() {
+  const t = [];
+  const eq = (name, actual, expected, eps = 0.0001) => {
+    const ok = Math.abs(actual - expected) <= eps;
+    t.push({ name, ok, actual, expected });
+    return ok;
+  };
+
+  const saved = JSON.parse(JSON.stringify(salaryParams));
+
+  // —— 三险一金与基数 clamp ——
+  salaryParams.socialBase = 10000;
+  salaryParams.fundBase = '';
+  salaryParams.baseLower = '';
+  salaryParams.baseUpper = '';
+  salaryParams.ratePension = 0.08; salaryParams.rateMedical = 0.02;
+  salaryParams.rateUnemployment = 0.005; salaryParams.rateFund = 0.12;
+  eq('三险一金 = 基数×22.5%', computeSocialInsurance(10000, ''), 2250);
+
+  salaryParams.baseLower = 4000;
+  eq('基数下限 clamp（3000→4000）', computeSocialInsurance(3000, ''), 4000 * 0.225);
+  salaryParams.baseLower = '';
+  salaryParams.baseUpper = 8000;
+  eq('基数上限 clamp（10000→8000）', computeSocialInsurance(10000, ''), 8000 * 0.225);
+  salaryParams.baseUpper = '';
+
+  // —— 工资薪金累计预扣（验收算例：月薪1万、三险一金2250、专项附加1000）——
+  const ctx = { socialInsurance: 2250, extraDeduction: 1000 };
+  let cumIncome = 0, cumTax = 0, cumDeduction = 0;
+  const monthly = [];
+  for (let m = 1; m <= 3; m++) {
+    cumDeduction += 5000 + 2250 + 1000;
+    const r = calcTaxForward(10000, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, ctx);
+    cumIncome = r.cumIncome; cumTax = r.cumTaxDue;
+    monthly.push(r);
+  }
+  eq('工资1月个税 52.50', monthly[0].currentTax, 52.5);
+  eq('工资1月实发 7697.50', monthly[0].postTax, 7697.5);
+  eq('工资2月个税 52.50（累计递进）', monthly[1].currentTax, 52.5);
+  eq('工资3月累计应纳税所得额 5250', monthly[2].taxableIncome, 5250);
+  eq('工资3月累计个税 157.50', monthly[2].cumTaxDue, 157.5);
+
+  // —— 反算往返：实发 7697.50 → 应发 10000 ——
+  const rev = calcTaxReverse(7697.5, 0, 8250, 0, TAX_STRATEGIES.salary, ctx);
+  eq('工资反算应发 10000', rev.preTax, 10000, 0.01);
+  eq('工资反算实发回代 7697.50', rev.postTax, 7697.5, 0.01);
+
+  // 高薪跳档：月薪3万，第2个月进入10%档
+  const r1 = calcTaxForward(30000, 0, 8250, 0, TAX_STRATEGIES.salary, ctx);
+  const r2 = calcTaxForward(30000, r1.cumIncome, 16500, r1.cumTaxDue, TAX_STRATEGIES.salary, ctx);
+  eq('工资高薪1月个税（3%档）652.50', r1.currentTax, 652.5);
+  eq('工资高薪2月个税（10%档）1177.50', r2.currentTax, 1177.5);
+
+  // —— 劳务报酬回归（默认策略行为不变）——
+  const l1 = calcTaxForward(10000, 0, 5000, 0);
+  eq('劳务预扣收入额 ×80% = 8000', l1.withholdingIncome, 8000);
+  eq('劳务1月个税 90', l1.currentTax, 90);
+  eq('劳务1月税后 9910', l1.postTax, 9910);
+  const lrev = calcTaxReverse(9910, 0, 5000, 0);
+  eq('劳务反算税前 10000', lrev.preTax, 10000, 0.01);
+  const l2 = calcTaxForward(10000, l1.cumIncome, 10000, l1.cumTaxDue);
+  eq('劳务2月个税 90（累计递进）', l2.currentTax, 90);
+
+  Object.assign(salaryParams, saved);
+
+  const failed = t.filter(x => !x.ok);
+  const summary = `${t.length - failed.length}/${t.length} 通过`;
+  if (failed.length) {
+    console.group('🧪 个税计算自检：' + summary);
+    failed.forEach(f => console.error(`✗ ${f.name}：期望 ${f.expected}，实际 ${f.actual}`));
+    console.groupEnd();
+  } else {
+    console.log('🧪 个税计算自检：✅ ' + summary);
+  }
+  return { passed: t.length - failed.length, total: t.length, failed };
+}
+
 // Init
 buildMonthGrid();
+readSalaryParams();
+setIncomeType('labor');
+runSelfTests();
 </script>
 </body>
 </html>

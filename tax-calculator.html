@@ -453,6 +453,51 @@
     border-color: var(--red) !important;
     background: rgba(253,114,114,0.08) !important;
   }
+  .sp-field select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+  }
+  .sp-field select:focus { border-color: var(--accent); }
+
+  /* 政策数据管理弹层 */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+  }
+  .modal-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 880px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 20px;
+  }
+  .pm-item-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    color: var(--text);
+    font-size: 12px;
+    text-align: right;
+    outline: none;
+  }
+  .pm-item-input:focus { border-color: var(--accent); }
 
   /* Batch results toolbar */
   .toolbar {
@@ -730,19 +775,56 @@
   </div>
 
   <div class="card" id="salary-params-card" style="display:none;">
-    <div class="card-title"><span class="icon" style="background:rgba(116,185,255,0.15);">⚙️</span> 工资薪金参数（多月累计与批量计算共用）</div>
+    <div class="card-title" style="display:flex;align-items:center;gap:8px;">
+      <span class="icon" style="background:rgba(116,185,255,0.15);">⚙️</span> 工资薪金参数（多月累计与批量计算共用）
+      <button class="btn btn-secondary" style="margin-left:auto;padding:4px 10px;font-size:12px;" onclick="openPolicyModal()">🛠 政策数据管理</button>
+    </div>
     <div class="salary-params-grid">
+      <div class="sp-field"><label>参保城市</label><select id="sp-city" onchange="onCityParamChange()"></select></div>
+      <div class="sp-field"><label>政策年度</label><select id="sp-year" onchange="readSalaryParams()"></select></div>
+      <div class="sp-field"><label>公积金比例</label><select id="sp-fund-rate" onchange="readSalaryParams()"></select></div>
+      <div class="sp-field" id="sp-fund-rate-custom-wrap" style="display:none;"><label>公积金比例（%）</label><input type="number" id="sp-fund-rate-custom" min="0" max="100" step="0.1" placeholder="如 7" oninput="readSalaryParams()"></div>
       <div class="sp-field"><label>社保基数（元/月）</label><input type="number" id="sp-social-base" min="0" step="0.01" placeholder="如 10000" oninput="readSalaryParams()"></div>
       <div class="sp-field"><label>公积金基数（元/月）</label><input type="number" id="sp-fund-base" min="0" step="0.01" placeholder="留空跟随社保基数" oninput="readSalaryParams()"></div>
-      <div class="sp-field"><label>养老比例（%）</label><input type="number" id="sp-rate-pension" min="0" max="100" step="0.1" value="8" oninput="readSalaryParams()"></div>
-      <div class="sp-field"><label>医疗比例（%）</label><input type="number" id="sp-rate-medical" min="0" max="100" step="0.1" value="2" oninput="readSalaryParams()"></div>
-      <div class="sp-field"><label>失业比例（%）</label><input type="number" id="sp-rate-unemployment" min="0" max="100" step="0.1" value="0.5" oninput="readSalaryParams()"></div>
-      <div class="sp-field"><label>公积金比例（%）</label><input type="number" id="sp-rate-fund" min="0" max="100" step="0.1" value="12" oninput="readSalaryParams()"></div>
-      <div class="sp-field"><label>基数下限（选填）</label><input type="number" id="sp-base-lower" min="0" step="0.01" placeholder="如 4000" oninput="readSalaryParams()"></div>
-      <div class="sp-field"><label>基数上限（选填）</label><input type="number" id="sp-base-upper" min="0" step="0.01" placeholder="如 30000" oninput="readSalaryParams()"></div>
       <div class="sp-field"><label>专项附加扣除（元/月）</label><input type="number" id="sp-extra-deduction" min="0" step="0.01" placeholder="如 1500" oninput="readSalaryParams()"></div>
     </div>
-    <div style="font-size:13px;color:var(--text2);">每月三险一金合计（个人部分）：<strong id="sp-si-total" style="color:var(--blue);">¥0.00</strong>　<span style="font-size:12px;">批量计算时，行内「社保基数 / 公积金基数 / 三险一金」列优先于上述全局基数</span></div>
+    <div style="overflow-x:auto;margin-bottom:10px;">
+      <table class="result-table" id="sp-items-table" style="font-size:12px;"></table>
+    </div>
+    <div style="font-size:12px;color:var(--text2);">⚠️ 政策数据为参考值，请以当地社保部门公布为准，可在「政策数据管理」中修改或导入。批量计算时，行内「城市 / 社保基数 / 公积金基数 / 三险一金」列优先于上述设置。</div>
+  </div>
+
+  <!-- 政策数据管理弹层 -->
+  <div class="modal-overlay" id="policy-modal" style="display:none;">
+    <div class="modal-card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="font-size:16px;font-weight:700;">🛠 城市社保公积金政策库</div>
+        <button class="btn btn-secondary" style="margin-left:auto;padding:4px 12px;font-size:12px;" onclick="closePolicyModal()">✕ 关闭</button>
+      </div>
+      <div class="info-box" style="margin-bottom:14px;">
+        内置数据为<strong>参考值</strong>（按公开资料整理，可能滞后于当地最新公布），修改后立即生效。可导出 JSON 备份，或导入自行维护的 JSON 数据。
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap;">
+        <div class="sp-field" style="width:180px;"><label>城市</label><select id="pm-city" onchange="onPmCityChange()"></select></div>
+        <div class="sp-field" style="width:220px;"><label>年度</label><select id="pm-year" onchange="onPmYearChange()"></select></div>
+        <button class="btn btn-secondary" style="padding:7px 12px;font-size:12px;" onclick="pmAddCity()">➕ 新增城市</button>
+        <button class="btn btn-secondary" style="padding:7px 12px;font-size:12px;" onclick="pmAddYear()">➕ 新增年度</button>
+        <button class="btn btn-secondary" style="padding:7px 12px;font-size:12px;" onclick="pmDeleteYear()">🗑 删除当前年度</button>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+        <div class="sp-field" style="width:150px;"><label>生效起（YYYY-MM）</label><input class="pm-item-input" style="text-align:left;" id="pm-eff-start" onchange="onPmEffectiveChange()"></div>
+        <div class="sp-field" style="width:150px;"><label>生效止（YYYY-MM）</label><input class="pm-item-input" style="text-align:left;" id="pm-eff-end" onchange="onPmEffectiveChange()"></div>
+        <div class="sp-field" style="flex:1;min-width:200px;"><label>年度说明</label><input class="pm-item-input" style="text-align:left;" id="pm-label" onchange="onPmLabelChange()"></div>
+      </div>
+      <div id="pm-items-wrap"></div>
+      <div style="display:flex;gap:12px;margin-top:16px;">
+        <button class="btn btn-green" style="flex:1;padding:10px;font-size:13px;" onclick="pmExportJSON()">📥 导出 JSON</button>
+        <label class="btn btn-secondary" style="flex:1;padding:10px;font-size:13px;margin:0;cursor:pointer;text-align:center;">
+          📤 导入 JSON（覆盖）
+          <input type="file" accept=".json" style="display:none;" onchange="pmImportJSON(this)">
+        </label>
+      </div>
+    </div>
   </div>
 
   <!-- Tabs -->
@@ -811,8 +893,8 @@
           <strong>📋 表格格式要求（工资薪金）：</strong><br>
           <strong>识别列（至少填一项）：</strong><strong>姓名</strong>、<strong>身份证号</strong>、<strong>电话</strong>、<strong>银行卡号</strong><br>
           <strong>数据列：</strong><strong>月份</strong>、<strong>应发工资</strong>（或实发工资，按计算方向选择）<br>
-          <strong>可选列：</strong><strong>社保基数</strong>、<strong>公积金基数</strong>、<strong>三险一金</strong>（个人部分金额）、<strong>专项附加扣除</strong>——行内有值时优先使用，缺失时回退到上方「工资参数」中的全局设置<br>
-          <em>列顺序不限，系统自动识别，可在列映射界面手动调整。每人按月累计预扣，同月多笔合并计税，跨年自动重置，不适用断月重置。</em>
+          <strong>可选列：</strong><strong>城市</strong>（广州/深圳等，按行内城市政策计算）、<strong>社保基数</strong>、<strong>公积金基数</strong>、<strong>三险一金</strong>（个人部分金额）、<strong>专项附加扣除</strong>——行内有值时优先使用，缺失时回退到整批城市选择和「工资参数」全局设置<br>
+          <em>列顺序不限，系统自动识别，可在列映射界面手动调整。每人按月累计预扣，同月多笔合并计税，跨年自动重置，不适用断月重置。政策上下限/比例为参考值，请以当地公布为准。</em>
         </div>
       </div>
 
@@ -1056,44 +1138,487 @@ var batchGapReset = true;
 /* 所得类型：'labor' 劳务报酬 | 'salary' 工资薪金 */
 var incomeType = 'labor';
 
-/* 工资薪金参数（多月累计与批量计算共用；比例以小数存储，UI 按百分数输入） */
-var salaryParams = {
-  socialBase: 0,      // 社保基数（元/月）；0 = 未设置
-  fundBase: '',       // 公积金基数；'' = 跟随社保基数
-  ratePension: 0.08,
-  rateMedical: 0.02,
-  rateUnemployment: 0.005,
-  rateFund: 0.12,
-  baseLower: '',      // 基数下限（选填）
-  baseUpper: '',      // 基数上限（选填）
-  extraDeduction: 0,  // 专项附加扣除（元/月）
+/* ==================== 城市社保公积金政策库 ====================
+ * 三层结构：城市 → 年度（含生效月区间）→ 险种（养老/医疗/失业/公积金）
+ * 每个险种：personal 个人比例(小数)、lower/upper 基数上下限（null = 不限）
+ * 公积金额外：rates 可选比例数组（公司择档 5%~12%）
+ * 内置数值为参考值（pending: true），请以当地社保部门公布为准，可在政策管理弹层修改/导入。
+ */
+function siItem(personal, lower, upper) { return { personal: personal, lower: lower, upper: upper }; }
+function fundItem(rates, personal, lower, upper) { return { personal: personal, rates: rates, lower: lower, upper: upper }; }
+
+const SI_ITEMS = [
+  { key: 'pension', label: '养老' },
+  { key: 'medical', label: '医疗(含生育)' },
+  { key: 'unemployment', label: '失业' },
+  { key: 'fund', label: '公积金' },
+];
+const SI_ITEM_LABELS = { pension: '养老', medical: '医疗(含生育)', unemployment: '失业', fund: '公积金' };
+
+const FUND_RATES_STD = [0.05, 0.06, 0.08, 0.10, 0.12];
+
+const CITY_POLICY_LIBRARY = {
+  beijing: {
+    name: '北京',
+    years: {
+      '2024': {
+        label: '2024年度（2024-07 ~ 2025-06）',
+        effective: ['2024-07', '2025-06'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, 6821, 35283),
+          medical: siItem(0.02, 6821, 35283),
+          unemployment: siItem(0.005, 6821, 35283),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2420, 35283)
+        }
+      }
+    }
+  },
+  shanghai: {
+    name: '上海',
+    years: {
+      '2024': {
+        label: '2024年度（2024-07 ~ 2025-06）',
+        effective: ['2024-07', '2025-06'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, 7384, 36921),
+          medical: siItem(0.02, 7384, 36921),
+          unemployment: siItem(0.005, 7384, 36921),
+          fund: fundItem([0.05, 0.06, 0.07, 0.08, 0.10, 0.12], 0.07, 2690, 36921)
+        }
+      }
+    }
+  },
+  guangzhou: {
+    name: '广州',
+    years: {
+      '2023': {
+        label: '2023年度（2023-07 ~ 2024-06）',
+        effective: ['2023-07', '2024-06'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, 4546, 26421),
+          medical: siItem(0.02, 7175, 35875),
+          unemployment: siItem(0.002, 4546, 26421),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2300, 38082)
+        }
+      },
+      '2024': {
+        label: '2024年度（2024-07 ~ 2025-06）',
+        effective: ['2024-07', '2025-06'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, 4546, 27501),
+          medical: siItem(0.02, 7175, 35875),
+          unemployment: siItem(0.002, 4546, 27501),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2300, 38082)
+        }
+      },
+      '2025': {
+        label: '2025年度（2025-07 ~ 2026-06）',
+        effective: ['2025-07', '2026-06'],
+        pending: true,
+        note: '沿用2024年度参考值，待当地公布后更新',
+        items: {
+          pension: siItem(0.08, 4546, 27501),
+          medical: siItem(0.02, 7175, 35875),
+          unemployment: siItem(0.002, 4546, 27501),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2300, 38082)
+        }
+      }
+    }
+  },
+  shenzhen: {
+    name: '深圳',
+    years: {
+      '2024': {
+        label: '2024年度（2024-07 ~ 2025-06）',
+        effective: ['2024-07', '2025-06'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, 4492, 27501),
+          medical: siItem(0.02, 6922, 34612),
+          unemployment: siItem(0.003, 4492, 27501),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2360, 41168)
+        }
+      },
+      '2025': {
+        label: '2025年度（2025-07 ~ 2026-06）',
+        effective: ['2025-07', '2026-06'],
+        pending: true,
+        note: '沿用2024年度参考值，待当地公布后更新',
+        items: {
+          pension: siItem(0.08, 4492, 27501),
+          medical: siItem(0.02, 6922, 34612),
+          unemployment: siItem(0.003, 4492, 27501),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2360, 41168)
+        }
+      }
+    }
+  },
+  hangzhou: {
+    name: '杭州',
+    years: {
+      '2024': {
+        label: '2024年度（2024-01 ~ 2024-12）',
+        effective: ['2024-01', '2024-12'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, 4812, 24930),
+          medical: siItem(0.02, 4812, 24930),
+          unemployment: siItem(0.005, 4812, 24930),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2490, 28695)
+        }
+      },
+      '2025': {
+        label: '2025年度（2025-01 ~ 2025-12）',
+        effective: ['2025-01', '2025-12'],
+        pending: true,
+        note: '沿用2024年度参考值，待当地公布后更新',
+        items: {
+          pension: siItem(0.08, 4812, 24930),
+          medical: siItem(0.02, 4812, 24930),
+          unemployment: siItem(0.005, 4812, 24930),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2490, 28695)
+        }
+      }
+    }
+  },
+  nanjing: {
+    name: '南京',
+    years: {
+      '2024': {
+        label: '2024年度（2024-01 ~ 2024-12）',
+        effective: ['2024-01', '2024-12'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, 4879, 24396),
+          medical: siItem(0.02, 4879, 24396),
+          unemployment: siItem(0.005, 4879, 24396),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2490, 27600)
+        }
+      },
+      '2025': {
+        label: '2025年度（2025-01 ~ 2025-12）',
+        effective: ['2025-01', '2025-12'],
+        pending: true,
+        note: '沿用2024年度参考值，待当地公布后更新',
+        items: {
+          pension: siItem(0.08, 4879, 24396),
+          medical: siItem(0.02, 4879, 24396),
+          unemployment: siItem(0.005, 4879, 24396),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2490, 27600)
+        }
+      }
+    }
+  },
+  suzhou: {
+    name: '苏州',
+    years: {
+      '2024': {
+        label: '2024年度（2024-01 ~ 2024-12）',
+        effective: ['2024-01', '2024-12'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, 4879, 24396),
+          medical: siItem(0.02, 4879, 24396),
+          unemployment: siItem(0.005, 4879, 24396),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2490, 24396)
+        }
+      },
+      '2025': {
+        label: '2025年度（2025-01 ~ 2025-12）',
+        effective: ['2025-01', '2025-12'],
+        pending: true,
+        note: '沿用2024年度参考值，待当地公布后更新',
+        items: {
+          pension: siItem(0.08, 4879, 24396),
+          medical: siItem(0.02, 4879, 24396),
+          unemployment: siItem(0.005, 4879, 24396),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2490, 24396)
+        }
+      }
+    }
+  },
+  chengdu: {
+    name: '成都',
+    years: {
+      '2024': {
+        label: '2024年度（2024-01 ~ 2024-12）',
+        effective: ['2024-01', '2024-12'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, 4511, 22555),
+          medical: siItem(0.02, 4511, 22555),
+          unemployment: siItem(0.005, 4511, 22555),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2100, 27420)
+        }
+      },
+      '2025': {
+        label: '2025年度（2025-01 ~ 2025-12）',
+        effective: ['2025-01', '2025-12'],
+        pending: true,
+        note: '沿用2024年度参考值，待当地公布后更新',
+        items: {
+          pension: siItem(0.08, 4511, 22555),
+          medical: siItem(0.02, 4511, 22555),
+          unemployment: siItem(0.005, 4511, 22555),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2100, 27420)
+        }
+      }
+    }
+  },
+  chongqing: {
+    name: '重庆',
+    years: {
+      '2024': {
+        label: '2024年度（2024-01 ~ 2024-12）',
+        effective: ['2024-01', '2024-12'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, 4386, 21932),
+          medical: siItem(0.02, 4386, 21932),
+          unemployment: siItem(0.005, 4386, 21932),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2100, 26514)
+        }
+      },
+      '2025': {
+        label: '2025年度（2025-01 ~ 2025-12）',
+        effective: ['2025-01', '2025-12'],
+        pending: true,
+        note: '沿用2024年度参考值，待当地公布后更新',
+        items: {
+          pension: siItem(0.08, 4386, 21932),
+          medical: siItem(0.02, 4386, 21932),
+          unemployment: siItem(0.005, 4386, 21932),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2100, 26514)
+        }
+      }
+    }
+  },
+  wuhan: {
+    name: '武汉',
+    years: {
+      '2024': {
+        label: '2024年度（2024-01 ~ 2024-12）',
+        effective: ['2024-01', '2024-12'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, 4494, 22470),
+          medical: siItem(0.02, 4494, 22470),
+          unemployment: siItem(0.005, 4494, 22470),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2210, 28092)
+        }
+      },
+      '2025': {
+        label: '2025年度（2025-01 ~ 2025-12）',
+        effective: ['2025-01', '2025-12'],
+        pending: true,
+        note: '沿用2024年度参考值，待当地公布后更新',
+        items: {
+          pension: siItem(0.08, 4494, 22470),
+          medical: siItem(0.02, 4494, 22470),
+          unemployment: siItem(0.005, 4494, 22470),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2210, 28092)
+        }
+      }
+    }
+  },
+  xian: {
+    name: '西安',
+    years: {
+      '2024': {
+        label: '2024年度（2024-01 ~ 2024-12）',
+        effective: ['2024-01', '2024-12'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, 4369, 21846),
+          medical: siItem(0.02, 4369, 21846),
+          unemployment: siItem(0.005, 4369, 21846),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2160, 26412)
+        }
+      },
+      '2025': {
+        label: '2025年度（2025-01 ~ 2025-12）',
+        effective: ['2025-01', '2025-12'],
+        pending: true,
+        note: '沿用2024年度参考值，待当地公布后更新',
+        items: {
+          pension: siItem(0.08, 4369, 21846),
+          medical: siItem(0.02, 4369, 21846),
+          unemployment: siItem(0.005, 4369, 21846),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2160, 26412)
+        }
+      }
+    }
+  },
+  tianjin: {
+    name: '天津',
+    years: {
+      '2024': {
+        label: '2024年度（2024-01 ~ 2024-12）',
+        effective: ['2024-01', '2024-12'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, 5013, 25065),
+          medical: siItem(0.02, 5013, 25065),
+          unemployment: siItem(0.005, 5013, 25065),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2180, 25539)
+        }
+      },
+      '2025': {
+        label: '2025年度（2025-01 ~ 2025-12）',
+        effective: ['2025-01', '2025-12'],
+        pending: true,
+        note: '沿用2024年度参考值，待当地公布后更新',
+        items: {
+          pension: siItem(0.08, 5013, 25065),
+          medical: siItem(0.02, 5013, 25065),
+          unemployment: siItem(0.005, 5013, 25065),
+          fund: fundItem(FUND_RATES_STD, 0.05, 2180, 25539)
+        }
+      }
+    }
+  },
+  custom: {
+    name: '自定义',
+    years: {
+      custom: {
+        label: '自定义政策',
+        effective: ['2000-01', '2999-12'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, null, null),
+          medical: siItem(0.02, null, null),
+          unemployment: siItem(0.005, null, null),
+          fund: fundItem(FUND_RATES_STD, 0.05, null, null)
+        }
+      }
+    }
+  }
 };
 
-/**
- * 按基数上下限对基数做 clamp；基数为 0/缺失时返回 0（由调用方决定兜底）
- */
-function clampSalaryBase(base) {
-  let b = Number(base) || 0;
-  if (b <= 0) return 0;
-  const lo = parseFloat(salaryParams.baseLower);
-  const hi = parseFloat(salaryParams.baseUpper);
-  if (salaryParams.baseLower !== '' && salaryParams.baseLower != null && isFinite(lo)) b = Math.max(b, lo);
-  if (salaryParams.baseUpper !== '' && salaryParams.baseUpper != null && isFinite(hi) && hi > 0) b = Math.min(b, hi);
-  return b;
+/* 工资薪金参数（多月累计与批量计算共用） */
+var salaryParams = {
+  cityId: 'custom',    // 城市 key 或 'custom'
+  policyYear: 'auto',  // 'auto' 按月份匹配生效区间 | 固定年度键
+  socialBase: 0,       // 社保缴费基数（元/月）；0 = 未设置
+  fundBase: '',        // 公积金基数；'' = 跟随社保基数
+  fundRate: 0.05,      // 公积金个人比例（城市择档或自定义手填）
+  extraDeduction: 0    // 专项附加扣除（元/月）
+};
+
+/* 批量城市相关状态 */
+var batchCityId = '';      // '' = 跟随工资参数
+var batchGrossAsBase = false;
+
+/* 城市名 → key 匹配（含"市"后缀容错） */
+function findCityKey(name) {
+  const s = String(name || '').trim().replace(/市$/, '');
+  if (!s) return null;
+  for (const [key, city] of Object.entries(CITY_POLICY_LIBRARY)) {
+    if (key === 'custom') continue;
+    if (s === city.name || s === key || s === city.name.replace(/市$/, '')) return key;
+  }
+  return null;
 }
 
 /**
- * 三险一金个人部分（月）= 社保基数×(养老+医疗+失业) + 公积金基数×公积金比例
- * @param {number} socialBase 社保基数；0/空 表示无三险一金
- * @param {number|string} fundBase 公积金基数；空则跟随社保基数
+ * 解析某城市某月份适用的政策年度与险种数据
+ * @returns {{cityKey, city, yearKey, items, matched, label}}
+ */
+function resolvePolicy(cityId, month) {
+  const cityKey = CITY_POLICY_LIBRARY[cityId] ? cityId : 'custom';
+  const city = CITY_POLICY_LIBRARY[cityKey];
+  const yearKeys = Object.keys(city.years);
+  let yearKey = null;
+
+  // 固定年度（该城市存在该年度时生效）
+  if (salaryParams.policyYear !== 'auto' && city.years[salaryParams.policyYear]) {
+    yearKey = salaryParams.policyYear;
+  } else if (month && month !== '-') {
+    for (const yk of yearKeys) {
+      const eff = city.years[yk].effective || ['2000-01', '2999-12'];
+      if (eff[0] <= month && month <= eff[1]) { yearKey = yk; break; }
+    }
+  }
+
+  let matched = true;
+  if (!yearKey) {
+    // 回退：生效区间终点最新的年度，并标注未精确匹配
+    const sorted = yearKeys.slice().sort((a, b) =>
+      String((city.years[b].effective || [''])[1]).localeCompare(String((city.years[a].effective || [''])[1])));
+    yearKey = sorted[0] || yearKeys[0];
+    matched = false;
+  }
+  const rec = city.years[yearKey];
+  return {
+    cityKey: cityKey,
+    city: city,
+    yearKey: yearKey,
+    items: rec.items,
+    matched: matched,
+    label: city.name + ' · ' + (rec.label || yearKey)
+  };
+}
+
+/* (城市, 月份) 政策解析记忆化；政策库修改时 clear() */
+const _policyCache = new Map();
+function resolvePolicyMemo(cityId, month) {
+  const k = cityId + '|' + month;
+  if (_policyCache.has(k)) return _policyCache.get(k);
+  const v = resolvePolicy(cityId, month);
+  _policyCache.set(k, v);
+  return v;
+}
+
+/** 险种基数 clamp；基数为 0/缺失时返回 0（由调用方决定兜底） */
+function clampItemBase(base, item) {
+  let v = Number(base) || 0;
+  if (v <= 0) return 0;
+  if (item.lower != null) v = Math.max(v, item.lower);
+  if (item.upper != null) v = Math.min(v, item.upper);
+  return v;
+}
+
+/**
+ * 三险一金个人部分（月），逐险种 clamp 后乘比例
+ * @returns {{pension, medical, unemployment, fund, total}} 各险种实缴与合计（round2）
+ */
+function computeSocialInsuranceDetail(socialBase, fundBase, items, fundRate) {
+  const fr = (fundRate == null || fundRate === '' || isNaN(Number(fundRate))) ? (items.fund.personal || 0) : Number(fundRate);
+  const pension = clampItemBase(socialBase, items.pension) * items.pension.personal;
+  const medical = clampItemBase(socialBase, items.medical) * items.medical.personal;
+  const unemployment = clampItemBase(socialBase, items.unemployment) * items.unemployment.personal;
+  const rawFund = (fundBase === '' || fundBase == null || isNaN(parseFloat(fundBase))) ? socialBase : fundBase;
+  const fund = clampItemBase(rawFund, items.fund) * fr;
+  return {
+    pension: round2(pension),
+    medical: round2(medical),
+    unemployment: round2(unemployment),
+    fund: round2(fund),
+    total: round2(pension + medical + unemployment + fund)
+  };
+}
+
+/**
+ * 按城市+月份解析政策后计算三险一金（带政策标签）
+ */
+function computeSocialInsuranceFor(cityId, month, socialBase, fundBase) {
+  const pol = resolvePolicyMemo(cityId, month);
+  const detail = computeSocialInsuranceDetail(socialBase, fundBase, pol.items, salaryParams.fundRate);
+  detail.policy = pol;
+  return detail;
+}
+
+/**
+ * 兼容旧调用：按当前工资参数（当前月份）计算三险一金合计
  */
 function computeSocialInsurance(socialBase, fundBase) {
-  const sb = clampSalaryBase(socialBase);
-  const rawFund = (fundBase === '' || fundBase == null || isNaN(parseFloat(fundBase))) ? socialBase : fundBase;
-  const fb = clampSalaryBase(rawFund);
-  const social = sb * (salaryParams.ratePension + salaryParams.rateMedical + salaryParams.rateUnemployment);
-  const fund = fb * salaryParams.rateFund;
-  return round2(social + fund);
+  const now = new Date();
+  const ym = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  return computeSocialInsuranceFor(salaryParams.cityId, ym, socialBase, fundBase).total;
 }
 
 // ==================== Income type & salary params ====================
@@ -1118,6 +1643,77 @@ function setIncomeType(type) {
   updateMultiInputHints();
 }
 
+/** 城市下拉选项 HTML（含自定义；skipCustom 用于批量行内城市场景） */
+function buildCityOptions(selectedValue, skipCustom) {
+  return Object.entries(CITY_POLICY_LIBRARY)
+    .filter(([key]) => !(skipCustom && key === 'custom'))
+    .map(([key, city]) => `<option value="${key}" ${key === selectedValue ? 'selected' : ''}>${city.name}</option>`)
+    .join('');
+}
+
+/** 城市切换：重建年度/公积金比例选项后再读取参数 */
+function onCityParamChange() {
+  const cityId = document.getElementById('sp-city')?.value || 'custom';
+  const city = CITY_POLICY_LIBRARY[cityId] || CITY_POLICY_LIBRARY.custom;
+  const yearSel = document.getElementById('sp-year');
+  if (yearSel) {
+    yearSel.innerHTML = `<option value="auto" ${salaryParams.policyYear === 'auto' ? 'selected' : ''}>自动匹配</option>` +
+      Object.keys(city.years).map(yk =>
+        `<option value="${yk}" ${yk === salaryParams.policyYear ? 'selected' : ''}>${city.years[yk].label || yk}</option>`).join('');
+  }
+  const frSel = document.getElementById('sp-fund-rate');
+  const frCustomWrap = document.getElementById('sp-fund-rate-custom-wrap');
+  const rates = (city.years[Object.keys(city.years)[0]]?.items?.fund?.rates) || FUND_RATES_STD;
+  if (frSel && frCustomWrap) {
+    if (cityId === 'custom') {
+      frSel.style.display = 'none';
+      frCustomWrap.style.display = '';
+    } else {
+      frSel.style.display = '';
+      frCustomWrap.style.display = 'none';
+      frSel.innerHTML = rates.map(r =>
+        `<option value="${r}" ${Number(r) === Number(salaryParams.fundRate) ? 'selected' : ''}>${(r * 100).toFixed(1).replace(/\.0$/, '')}%</option>`).join('');
+      // 当前比例不在该城市可选档内时重置为最低档
+      if (!rates.some(r => Number(r) === Number(salaryParams.fundRate))) {
+        frSel.value = String(rates[0]);
+      }
+    }
+  }
+  readSalaryParams();
+}
+
+/** 渲染参数卡中的险种政策明细表（只读） */
+function renderSalaryItemsTable() {
+  const el = document.getElementById('sp-items-table');
+  if (!el) return;
+  const now = new Date();
+  const nowYM = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const pol = resolvePolicy(salaryParams.cityId, nowYM);
+  const det = computeSocialInsuranceDetail(salaryParams.socialBase, salaryParams.fundBase, pol.items, salaryParams.fundRate);
+  const fmtBound = (v) => (v == null ? '不限' : formatNum(v));
+  el.innerHTML = `
+    <thead>
+      <tr>
+        <th colspan="5" style="text-align:left;color:var(--text2);font-weight:500;">适用政策：${pol.label}${pol.matched ? '' : '（未精确匹配月份，已用最新年度）'}${pol.items && CITY_POLICY_LIBRARY[pol.cityKey].years[pol.yearKey].pending ? ' · 参考值待核对' : ''}</th>
+      </tr>
+      <tr><th>险种</th><th>个人比例</th><th>基数下限</th><th>基数上限</th><th>按当前基数实缴</th></tr>
+    </thead>
+    <tbody>
+      ${SI_ITEMS.map(it => {
+        const item = pol.items[it.key];
+        const rate = it.key === 'fund' ? (salaryParams.fundRate ?? item.personal) : item.personal;
+        return `<tr>
+          <td>${it.label}</td>
+          <td>${(rate * 100).toFixed(1).replace(/\.0$/, '')}%</td>
+          <td>${fmtBound(item.lower)}</td>
+          <td>${fmtBound(item.upper)}</td>
+          <td style="color:var(--blue);">¥${formatNum(det[it.key])}</td>
+        </tr>`;
+      }).join('')}
+      <tr class="total-row"><td colspan="4">三险一金合计（个人/月）</td><td style="color:var(--blue);">¥${formatNum(det.total)}</td></tr>
+    </tbody>`;
+}
+
 /**
  * 从「工资参数」读取输入到 salaryParams；非法输入标红并保留上一次合法值
  * @returns {boolean} 是否全部合法
@@ -1134,24 +1730,248 @@ function readSalaryParams() {
     el.classList.remove('input-error');
     return v;
   };
+  const citySel = document.getElementById('sp-city');
+  if (citySel && CITY_POLICY_LIBRARY[citySel.value]) salaryParams.cityId = citySel.value;
+  const yearSel = document.getElementById('sp-year');
+  if (yearSel) salaryParams.policyYear = yearSel.value || 'auto';
+  const frSel = document.getElementById('sp-fund-rate');
+  const frCustom = document.getElementById('sp-fund-rate-custom');
+  if (salaryParams.cityId === 'custom') {
+    const v = frCustom ? readNum('sp-fund-rate-custom', 0, 100) : '';
+    if (v !== '') salaryParams.fundRate = v / 100;
+  } else if (frSel && frSel.value !== '') {
+    salaryParams.fundRate = Number(frSel.value);
+  }
   const base = readNum('sp-social-base', 0, Infinity);
   if (base !== '') salaryParams.socialBase = base;
   salaryParams.fundBase = readNum('sp-fund-base', 0, Infinity);
-  const pension = readNum('sp-rate-pension', 0, 100);
-  if (pension !== '') salaryParams.ratePension = pension / 100;
-  const medical = readNum('sp-rate-medical', 0, 100);
-  if (medical !== '') salaryParams.rateMedical = medical / 100;
-  const unemployment = readNum('sp-rate-unemployment', 0, 100);
-  if (unemployment !== '') salaryParams.rateUnemployment = unemployment / 100;
-  const fundRate = readNum('sp-rate-fund', 0, 100);
-  if (fundRate !== '') salaryParams.rateFund = fundRate / 100;
-  salaryParams.baseLower = readNum('sp-base-lower', 0, Infinity);
-  salaryParams.baseUpper = readNum('sp-base-upper', 0, Infinity);
   const extra = readNum('sp-extra-deduction', 0, Infinity);
   if (extra !== '') salaryParams.extraDeduction = extra;
-  const totalEl = document.getElementById('sp-si-total');
-  if (totalEl) totalEl.textContent = '¥' + formatNum(computeSocialInsurance(salaryParams.socialBase, salaryParams.fundBase));
+  renderSalaryItemsTable();
   return ok;
+}
+
+// ==================== 政策数据管理弹层 ====================
+
+window._pmCity = 'custom';
+window._pmYear = '';
+
+function openPolicyModal() {
+  document.getElementById('policy-modal').style.display = '';
+  const cityKeys = Object.keys(CITY_POLICY_LIBRARY);
+  if (!cityKeys.includes(window._pmCity)) window._pmCity = 'custom';
+  onPmCityChange();
+}
+
+function closePolicyModal() {
+  document.getElementById('policy-modal').style.display = 'none';
+}
+
+function pmCityOptionsHTML() {
+  return Object.entries(CITY_POLICY_LIBRARY).map(([key, city]) =>
+    `<option value="${key}" ${key === window._pmCity ? 'selected' : ''}>${city.name}</option>`).join('');
+}
+
+function onPmCityChange() {
+  const sel = document.getElementById('pm-city');
+  window._pmCity = sel.value;
+  if (!CITY_POLICY_LIBRARY[window._pmCity]) window._pmCity = 'custom';
+  const city = CITY_POLICY_LIBRARY[window._pmCity];
+  const yearKeys = Object.keys(city.years);
+  if (!yearKeys.includes(window._pmYear)) window._pmYear = yearKeys[0];
+  const yearSel = document.getElementById('pm-year');
+  yearSel.innerHTML = yearKeys.map(yk =>
+    `<option value="${yk}" ${yk === window._pmYear ? 'selected' : ''}>${city.years[yk].label || yk}</option>`).join('');
+  onPmYearChange();
+}
+
+function onPmYearChange() {
+  const sel = document.getElementById('pm-year');
+  window._pmYear = sel.value;
+  renderPolicyEditor();
+}
+
+function renderPolicyEditor() {
+  const lib = CITY_POLICY_LIBRARY[window._pmCity];
+  const rec = lib && lib.years[window._pmYear];
+  const effStart = document.getElementById('pm-eff-start');
+  const effEnd = document.getElementById('pm-eff-end');
+  const label = document.getElementById('pm-label');
+  if (!rec) {
+    effStart.value = ''; effEnd.value = ''; label.value = '';
+    document.getElementById('pm-items-wrap').innerHTML = '<div style="color:var(--text2);font-size:13px;">请选择或新增年度</div>';
+    return;
+  }
+  effStart.value = rec.effective ? rec.effective[0] : '';
+  effEnd.value = rec.effective ? rec.effective[1] : '';
+  label.value = rec.label || '';
+  const numInput = (cityKey, yk, itemKey, field, value, step, placeholder) =>
+    `<input class="pm-item-input" type="number" step="${step}" placeholder="${placeholder || ''}" value="${value == null ? '' : value}"
+      onchange="onPmItemInput('${cityKey}','${yk}','${itemKey}','${field}',this.value)">`;
+  document.getElementById('pm-items-wrap').innerHTML = `
+    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">
+      <table class="result-table" style="font-size:12px;">
+        <thead><tr><th>险种</th><th>个人比例（%）</th><th>基数下限</th><th>基数上限</th><th>公积金比例档（%，逗号分隔）</th></tr></thead>
+        <tbody>
+          ${SI_ITEMS.map(it => {
+            const item = rec.items[it.key];
+            if (!item) return `<tr><td>${SI_ITEM_LABELS[it.key]}</td><td colspan="4" style="color:var(--text2);">—</td></tr>`;
+            const isFund = it.key === 'fund';
+            return `<tr>
+              <td>${it.label}${item.pending ? ' <span style="color:var(--orange);font-size:10px;">待核对</span>' : ''}</td>
+              <td>${numInput(window._pmCity, window._pmYear, it.key, 'personal', round2((item.personal || 0) * 100), 0.1, '8')}</td>
+              <td>${numInput(window._pmCity, window._pmYear, it.key, 'lower', item.lower, 0.01, '不限')}</td>
+              <td>${numInput(window._pmCity, window._pmYear, it.key, 'upper', item.upper, 0.01, '不限')}</td>
+              <td>${isFund ? `<input class="pm-item-input" value="${(item.rates || []).map(r => round2(r * 100)).join(',')}"
+                    onchange="onPmFundRatesInput(this.value)">` : '<span style="color:var(--text2);">—</span>'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-top:6px;">比例与上下限留空表示不限制；修改后立即生效（编辑过的险种会移除「待核对」标记）。</div>`;
+}
+
+function onPmItemInput(cityKey, yk, itemKey, field, value) {
+  const lib = CITY_POLICY_LIBRARY[cityKey];
+  const rec = lib && lib.years[yk];
+  const it = rec && rec.items[itemKey];
+  if (!it) return;
+  const raw = String(value).trim();
+  if (raw === '' || field === 'lower' || field === 'upper') {
+    const n = parseFloat(raw);
+    it[field] = (raw === '' || isNaN(n)) ? null : n;
+  } else {
+    const n = parseFloat(raw);
+    if (!isNaN(n)) it[field] = n / 100;
+  }
+  delete it.pending;
+  _policyCache.clear();
+  renderPolicyEditor();
+  renderSalaryItemsTable();
+}
+
+function onPmFundRatesInput(value) {
+  const lib = CITY_POLICY_LIBRARY[window._pmCity];
+  const rec = lib && lib.years[window._pmYear];
+  const it = rec && rec.items.fund;
+  if (!it) return;
+  const rates = String(value).split(/[,，]/).map(s => parseFloat(s) / 100).filter(n => !isNaN(n) && n > 0);
+  if (rates.length) { it.rates = rates; delete it.pending; }
+  _policyCache.clear();
+  renderSalaryItemsTable();
+}
+
+function onPmEffectiveChange() {
+  const lib = CITY_POLICY_LIBRARY[window._pmCity];
+  const rec = lib && lib.years[window._pmYear];
+  if (!rec) return;
+  const s = document.getElementById('pm-eff-start').value.trim();
+  const e = document.getElementById('pm-eff-end').value.trim();
+  const ymRe = /^\d{4}-\d{2}$/;
+  rec.effective = [ymRe.test(s) ? s : '2000-01', ymRe.test(e) ? e : '2999-12'];
+  _policyCache.clear();
+  renderSalaryItemsTable();
+}
+
+function onPmLabelChange() {
+  const lib = CITY_POLICY_LIBRARY[window._pmCity];
+  const rec = lib && lib.years[window._pmYear];
+  if (rec) rec.label = document.getElementById('pm-label').value.trim() || window._pmYear;
+}
+
+function pmAddCity() {
+  const name = prompt('新增城市名称（如：长沙）：');
+  if (!name || !name.trim()) return;
+  const clean = name.trim();
+  if (Object.values(CITY_POLICY_LIBRARY).some(c => c.name === clean)) return alert('该城市已存在');
+  const key = 'c' + Date.now().toString(36);
+  CITY_POLICY_LIBRARY[key] = {
+    name: clean,
+    years: {
+      custom: {
+        label: clean + '政策',
+        effective: ['2000-01', '2999-12'],
+        pending: true,
+        items: {
+          pension: siItem(0.08, null, null),
+          medical: siItem(0.02, null, null),
+          unemployment: siItem(0.005, null, null),
+          fund: fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
+        }
+      }
+    }
+  };
+  window._pmCity = key;
+  onPmCityChange();
+}
+
+function pmAddYear() {
+  const yk = prompt('新增年度键（如 2025）：');
+  if (!yk || !/^\d{4}$/.test(yk.trim())) return alert('年度键需为 4 位年份');
+  const key = yk.trim();
+  const lib = CITY_POLICY_LIBRARY[window._pmCity];
+  if (lib.years[key]) return alert('该年度已存在');
+  lib.years[key] = {
+    label: key + '年度',
+    effective: [key + '-01', key + '-12'],
+    pending: true,
+    items: JSON.parse(JSON.stringify(Object.values(lib.years)[0].items))
+  };
+  window._pmYear = key;
+  onPmCityChange();
+}
+
+function pmDeleteYear() {
+  const lib = CITY_POLICY_LIBRARY[window._pmCity];
+  const yearKeys = Object.keys(lib.years);
+  if (yearKeys.length <= 1) return alert('至少保留一个年度');
+  if (!confirm(`确认删除「${lib.name} ${lib.years[window._pmYear].label || window._pmYear}」？`)) return;
+  delete lib.years[window._pmYear];
+  window._pmYear = Object.keys(lib.years)[0];
+  _policyCache.clear();
+  onPmCityChange();
+}
+
+function pmExportJSON() {
+  downloadFile(JSON.stringify(CITY_POLICY_LIBRARY, null, 2), '城市社保公积金政策库.json', 'application/json');
+}
+
+function pmImportJSON(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    let data;
+    try {
+      data = JSON.parse(e.target.result);
+    } catch (err) {
+      return alert('JSON 解析失败：' + err.message);
+    }
+    const valid = data && typeof data === 'object' && Object.values(data).every(city =>
+      city && typeof city.name === 'string' && city.years && typeof city.years === 'object');
+    if (!valid) return alert('格式不符：需要 { 城市key: { name, years: { 年度: { effective, items } } } } 结构');
+    if (!confirm('导入将覆盖当前整个政策库，确认继续？')) return;
+    Object.keys(CITY_POLICY_LIBRARY).forEach(k => delete CITY_POLICY_LIBRARY[k]);
+    Object.assign(CITY_POLICY_LIBRARY, data);
+    if (!CITY_POLICY_LIBRARY.custom) {
+      CITY_POLICY_LIBRARY.custom = {
+        name: '自定义',
+        years: { custom: { label: '自定义政策', effective: ['2000-01', '2999-12'], items: {
+          pension: siItem(0.08, null, null), medical: siItem(0.02, null, null),
+          unemployment: siItem(0.005, null, null), fund: fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
+        } } }
+      };
+    }
+    if (!CITY_POLICY_LIBRARY[salaryParams.cityId]) salaryParams.cityId = 'custom';
+    window._pmCity = Object.keys(CITY_POLICY_LIBRARY)[0];
+    _policyCache.clear();
+    onPmCityChange();
+    onCityParamChange();
+    alert('导入成功：' + Object.keys(CITY_POLICY_LIBRARY).length + ' 个城市');
+  };
+  reader.readAsText(file, 'utf-8');
 }
 
 // ==================== Tabs ====================
@@ -1269,18 +2089,20 @@ function calcMulti() {
   let lastMonth = '';
 
   const isSalary = incomeType === 'salary';
-  const salarySI = isSalary ? computeSocialInsurance(salaryParams.socialBase, salaryParams.fundBase) : 0;
   const salaryExtra = isSalary ? Math.max(0, Number(salaryParams.extraDeduction) || 0) : 0;
-  const salaryCtx = { socialInsurance: salarySI, extraDeduction: salaryExtra };
 
   data.forEach(d => {
     if (isSalary) {
-      /* 工资薪金：始终累计预扣；每月减除 = 5000 + 三险一金 + 专项附加（同月只计一次） */
+      /* 工资薪金：始终累计预扣；逐月匹配城市政策；每月减除 = 5000 + 三险一金 + 专项附加（同月只计一次） */
+      const pol = resolvePolicyMemo(salaryParams.cityId, d.month);
+      const siD = computeSocialInsuranceFor(salaryParams.cityId, d.month, salaryParams.socialBase, salaryParams.fundBase);
+      const salarySI = siD.total;
       if (d.month !== lastMonth) {
         lastMonth = d.month;
         cumDeduction += 5000 + salarySI + salaryExtra;
       }
 
+      const salaryCtx = { socialInsurance: salarySI, extraDeduction: salaryExtra };
       const r = multiDirection === 'forward'
         ? calcTaxForward(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx)
         : calcTaxReverse(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx);
@@ -1292,7 +2114,10 @@ function calcMulti() {
         ...d,
         ...r,
         _isGap: false,
-        _isOldPolicy: false
+        _isOldPolicy: false,
+        _policyLabel: pol.label,
+        _yearFallback: !pol.matched,
+        _siDetail: siD
       });
     } else if (isNewPolicy(d.month)) {
       // 新政策：累计预扣
@@ -1422,10 +2247,10 @@ function renderMultiResults(results) {
       tbodyHTML += `
         <tr>
           <td>${r.month}</td>
-          <td class="label-col">${r.note}</td>
+          <td class="label-col">${r.note}${isSalary && r._policyLabel ? `<div style="font-size:11px;color:var(--text2);margin-top:2px;">${r._policyLabel}${r._yearFallback ? '（年度未匹配）' : ''}</div>` : ''}</td>
           <td>¥${formatNum(multiDirection === 'forward' ? r.preTax : r.postTax)}</td>
           ${isSalary
-            ? `<td>¥${formatNum(r.socialInsurance)}</td><td>¥${formatNum(r.extraDeduction)}</td>`
+            ? `<td${r._siDetail ? ` title="养老 ¥${formatNum(r._siDetail.pension)} / 医疗 ¥${formatNum(r._siDetail.medical)} / 失业 ¥${formatNum(r._siDetail.unemployment)} / 公积金 ¥${formatNum(r._siDetail.fund)}"` : ''}>¥${formatNum(r.socialInsurance)}</td><td>¥${formatNum(r.extraDeduction)}</td>`
             : `<td>¥${formatNum(r.withholdingIncome)}</td>`}
           <td>¥${formatNum(r.cumIncome)}</td>
           <td>¥${formatNum(r.taxableIncome)}</td>
@@ -2314,6 +3139,14 @@ const COL_KEYWORDS = [
     exclude: /社保|公积金|三险|五险/i
   },
   {
+    type: 'city',
+    patterns: [
+      /^(城市|参保地|缴纳地|工作城市|参保城市|社保城市)$/i,
+      /城市|参保地|缴纳地/i
+    ],
+    exclude: null
+  },
+  {
     type: 'idCard',
     patterns: [
       /^(身份证|身份证号|身份证号码|id\s*card|idcard|证件号)$/i,
@@ -2364,6 +3197,7 @@ const COL_TYPE_LABELS = {
   fundBase:       '🏠 公积金基数',
   socialInsurance:'🛡️ 三险一金(个人)',
   extraDeduction: '➕ 专项附加扣除',
+  city:           '🏙️ 城市',
   idCard:    '🪪 身份证',
   phone:     '📱 电话',
   bankName:  '🏦 开户银行',
@@ -2827,6 +3661,7 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
       if (isSummaryLikeRow(row)) return;
       let month = '', amount = 0, name = '默认', idCard = '', phone = '', bankCard = '';
       let socialBase = '', fundBase = '', socialInsuranceAmt = '', extraDeduction = '';
+      let city = '';
       const monthHint = row._sheetMonthHint || '';
 
       // 金额类单元格：空值保留 ''（区别于显式 0），供行内值优先/全局兜底判断
@@ -2847,6 +3682,7 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
       if (rowColMap.fundBase != null) fundBase = readAmt(rowColMap.fundBase);
       if (rowColMap.socialInsurance != null) socialInsuranceAmt = readAmt(rowColMap.socialInsurance);
       if (rowColMap.extraDeduction != null) extraDeduction = readAmt(rowColMap.extraDeduction);
+      if (rowColMap.city != null) city = String(row[rowColMap.city] == null ? '' : row[rowColMap.city]).trim();
       if ((!month || month === '-') && monthHint) month = monthHint;
       name = sanitizeName(name) || '默认';
 
@@ -2883,6 +3719,7 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
           fundBase,
           socialInsuranceAmt,
           extraDeduction,
+          city,
           person: name,
           idCard,
           phone,
@@ -3296,7 +4133,23 @@ function showBatchPreview(parsed, personKeys, personsMap, filename) {
             <input type="checkbox" checked onclick="batchGapReset=this.checked;">
             <span class="slider"></span>
           </label>
-        </div>` : `<div style="font-size:12px;color:var(--text2);margin-bottom:16px;">三险一金与专项附加扣除按行内列（如有）与「工资参数」全局设置自动取值。</div>`}
+        </div>` : `
+        <div class="salary-params-grid" style="margin-bottom:12px;">
+          <div class="sp-field">
+            <label>整批参保城市（表格有「城市」列时按行内为准）</label>
+            <select id="batch-city" onchange="batchCityId=this.value;">
+              <option value="">跟随「工资参数」中的城市</option>
+              ${buildCityOptions('', true)}
+            </select>
+          </div>
+          <div class="sp-field" style="display:flex;align-items:flex-end;padding-bottom:4px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);">
+              <input type="checkbox" onchange="batchGrossAsBase=this.checked;" style="accent-color:var(--accent);">
+              无基数时按应发工资作基数
+            </label>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:16px;">三险一金按行内城市/整批城市政策计算：行内「三险一金」金额 > 行内基数（按城市上下限 clamp）> 全局基数${incomeType === 'salary' ? ' > 应发工资作基数（勾选后）' : ''}；均无则记 0 并标注。</div>`}
         <button class="btn btn-primary" onclick="runBatchCalc()" style="width:100%;padding:12px;font-size:15px;">🚀 开始计算</button>
       </div>
     </div>
@@ -3367,20 +4220,37 @@ function runBatchCalc() {
           lastYear = curYear;
         }
 
-        /* 三险一金：行内金额 > 行内基数×全局比例 > 全局基数×比例（全缺为 0 并标注） */
+        /* 城市适用链：行内城市 > 整批城市 > 工资参数城市；未知城市回退并标注 */
+        const rowCityKey = d.city ? findCityKey(d.city) : null;
+        const cityUnknown = !!d.city && !rowCityKey;
+        const cityKey = rowCityKey || batchCityId || salaryParams.cityId;
+        const pol = resolvePolicyMemo(cityKey, d.month);
+        const cityFundRate = cityKey === 'custom'
+          ? salaryParams.fundRate
+          : (salaryParams.fundRate ?? ((pol.items.fund && pol.items.fund.personal) || 0));
+
+        /* 三险一金：行内金额 > 行内基数×城市政策 > 全局基数 > 按应发工资作基数（勾选时） > 0 并标注 */
         let si;
+        let siD = null;
         const hasRowSIAmt = d.socialInsuranceAmt !== '' && d.socialInsuranceAmt != null;
         const hasRowBase = d.socialBase !== '' && d.socialBase != null && d.socialBase > 0;
         if (hasRowSIAmt) {
           si = d.socialInsuranceAmt;
         } else if (hasRowBase) {
           const fund = (d.fundBase !== '' && d.fundBase != null) ? d.fundBase : d.socialBase;
-          si = computeSocialInsurance(d.socialBase, fund);
+          siD = computeSocialInsuranceDetail(d.socialBase, fund, pol.items, cityFundRate);
+          si = siD.total;
+        } else if (salaryParams.socialBase > 0) {
+          siD = computeSocialInsuranceDetail(salaryParams.socialBase, salaryParams.fundBase, pol.items, cityFundRate);
+          si = siD.total;
+        } else if (batchGrossAsBase) {
+          siD = computeSocialInsuranceDetail(d.amount, '', pol.items, cityFundRate);
+          si = siD.total;
         } else {
-          si = computeSocialInsurance(salaryParams.socialBase, salaryParams.fundBase);
+          si = 0;
         }
         si = round2(Math.max(0, Number(si) || 0));
-        const siMissing = !hasRowSIAmt && !hasRowBase && !(salaryParams.socialBase > 0);
+        const siMissing = !hasRowSIAmt && !hasRowBase && !(salaryParams.socialBase > 0) && !batchGrossAsBase;
 
         const extra = (d.extraDeduction !== '' && d.extraDeduction != null)
           ? Math.max(0, Number(d.extraDeduction) || 0)
@@ -3414,7 +4284,12 @@ function runBatchCalc() {
           ...r,
           _isGap: false,
           _isOldPolicy: false,
-          _siMissing: siMissing
+          _siMissing: siMissing,
+          _cityUnknown: cityUnknown,
+          _yearFallback: !pol.matched,
+          _siDetail: siD,
+          cityName: CITY_POLICY_LIBRARY[cityKey].name + (cityUnknown ? `（未识别:${d.city}）` : ''),
+          policyYearLabel: pol.label + (!pol.matched ? '（年度未匹配）' : '')
         });
       } else if (isNewPolicy(d.month)) {
         // 新政策：累计预扣
@@ -3567,7 +4442,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
     let yearSections = '';
     years.forEach((yr, yi) => {
       const yRows = yearGroups[yr];
-      const gapColspan = (isSalary ? 10 : 8) + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
+      const gapColspan = (isSalary ? 12 : 8) + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
       const yearSep = yi > 0
         ? `<tr style="background:rgba(108,92,231,0.12);"><td colspan="${gapColspan}" style="text-align:center;padding:10px;font-weight:700;color:var(--accent2);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`
         : '';
@@ -3582,18 +4457,27 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
         const gapMarker = r._isGap
           ? `<tr style="background:rgba(253,114,114,0.1);"><td colspan="${gapColspan}" style="text-align:center;padding:8px;font-weight:600;color:var(--red);font-size:12px;">⚠️ 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`
           : '';
-        
+
         const oldPolicyMarker = r._isOldPolicy
           ? `<tr style="background:rgba(253,203,110,0.1);"><td colspan="${gapColspan}" style="text-align:center;padding:8px;font-weight:600;color:var(--orange);font-size:12px;">📅 旧政策：${r.month} 按生产经营所得计算，不扣税（2025年10月1日前）</td></tr>`
           : '';
-        
-        return gapMarker + oldPolicyMarker + `
+
+        const cityWarnMarker = (r._cityUnknown || r._yearFallback)
+          ? `<tr style="background:rgba(253,203,110,0.1);"><td colspan="${gapColspan}" style="text-align:center;padding:8px;font-weight:600;color:var(--orange);font-size:12px;">⚠️ ${r.month}：${r._cityUnknown ? `城市「${r.city}」未识别，已回退全局城市；` : ''}${r._yearFallback ? '政策年度未精确匹配，已用最新年度' : ''}</td></tr>`
+          : '';
+
+        const siTitle = r._siDetail
+          ? ` title="养老 ¥${formatNum(r._siDetail.pension)} / 医疗 ¥${formatNum(r._siDetail.medical)} / 失业 ¥${formatNum(r._siDetail.unemployment)} / 公积金 ¥${formatNum(r._siDetail.fund)}"`
+          : (r._siMissing ? ' title="行内与全局均未设置基数，三险一金按 0 计算"' : '');
+
+        return gapMarker + oldPolicyMarker + cityWarnMarker + `
           <tr>
             <td>${seq}</td>
             <td>${r.month}</td>
+            ${isSalary ? `<td>${r.cityName || '-'}</td><td style="font-size:12px;color:var(--text2);">${r.policyYearLabel || '-'}</td>` : ''}
             ${extraCols}
             <td>¥${formatNum(batchDirection === 'forward' ? r.preTax : r.postTax)}</td>
-            ${isSalary ? `<td${r._siMissing ? ' style="color:var(--orange);" title="行内与全局均未设置社保基数，三险一金按 0 计算"' : ''}>¥${formatNum(r.socialInsurance || 0)}${r._siMissing ? ' ⚠' : ''}</td><td>¥${formatNum(r.extraDeduction || 0)}</td>` : ''}
+            ${isSalary ? `<td${siTitle}${r._siMissing ? ' style="color:var(--orange);"' : ''}>¥${formatNum(r.socialInsurance || 0)}${r._siMissing ? ' ⚠' : ''}</td><td>¥${formatNum(r.extraDeduction || 0)}</td>` : ''}
             <td>¥${formatNum(r.cumIncome)}</td>
             <td>${(r.rate * 100)}%</td>
             <td class="tax-col">¥${formatNum(r.currentTax)}</td>
@@ -3621,6 +4505,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
               <tr>
                 <th>#</th>
                 <th>月份</th>
+                ${isSalary ? '<th>城市</th><th>政策年度</th>' : ''}
                 ${extraHeadCols}
                 <th>${preColLabel}</th>
                 ${isSalary ? '<th>三险一金(个人)</th><th>专项附加</th>' : ''}
@@ -3636,7 +4521,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
               <tr class="total-row">
                 <td colspan="${totalColspan}">小计</td>
                 <td>¥${formatNum(batchDirection === 'forward' ? personPre : personPost)}</td>
-                ${isSalary ? `<td>¥${formatNum(rows.reduce((s, r) => s + (r.socialInsurance || 0), 0))}</td><td>¥${formatNum(rows.reduce((s, r) => s + (r.extraDeduction || 0), 0))}</td>` : ''}
+                ${isSalary ? `<td></td><td></td><td>¥${formatNum(rows.reduce((s, r) => s + (r.socialInsurance || 0), 0))}</td><td>¥${formatNum(rows.reduce((s, r) => s + (r.extraDeduction || 0), 0))}</td>` : ''}
                 <td></td>
                 <td></td>
                 <td class="tax-col">¥${formatNum(personTax)}</td>
@@ -3712,7 +4597,7 @@ function exportBatchCSV() {
   if (hasPhone) headerCols += ',电话';
   if (hasBankCard) headerCols += ',银行卡号';
   if (isSalary) {
-    headerCols += `,月份,${preLabel},三险一金(个人),专项附加扣除,累计应发金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},计税方式`;
+    headerCols += `,月份,城市,政策年度,${preLabel},三险一金(个人),专项附加扣除,累计应发金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},计税方式`;
   } else {
     headerCols += `,月份,${preLabel},本次预扣收入额,累计发放金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},政策类型`;
   }
@@ -3725,7 +4610,7 @@ function exportBatchCSV() {
     const inAmt = round2(batchDirection === 'forward' ? r.preTax : r.postTax);
     const outAmt = round2(batchDirection === 'forward' ? r.postTax : r.preTax);
     if (isSalary) {
-      cols += `,"${r.month}",${inAmt},${round2(r.socialInsurance || 0)},${round2(r.extraDeduction || 0)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${outAmt},累计预扣${r._siMissing ? '(三险一金未设置)' : ''}`;
+      cols += `,"${r.month}","${r.cityName || ''}","${r.policyYearLabel || ''}",${inAmt},${round2(r.socialInsurance || 0)},${round2(r.extraDeduction || 0)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${outAmt},累计预扣${r._siMissing ? '(三险一金未设置)' : ''}${r._cityUnknown ? '(城市未识别)' : ''}${r._yearFallback ? '(年度未匹配)' : ''}`;
     } else {
       cols += `,"${r.month}",${inAmt},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${outAmt},${r._isOldPolicy ? '旧政策' : '新政策'}`;
     }
@@ -3737,7 +4622,7 @@ function exportBatchCSV() {
 
 function downloadTemplate() {
   if (incomeType === 'salary') {
-    const csv = '姓名,身份证号,月份,应发工资,社保基数,公积金基数,三险一金,专项附加扣除\n张三,110101199001011234,2026-01,10000,10000,10000,,1000\n张三,110101199001011234,2026-02,10000,10000,10000,,1000\n张三,110101199001011234,2026-03,12000,10000,,,1500\n李四,110101199202022345,2026-01,8000,6000,,,0\n李四,110101199202022345,2026-02,8000,6000,,,0';
+    const csv = '姓名,身份证号,月份,应发工资,城市,社保基数,公积金基数,三险一金,专项附加扣除\n张三,110101199001011234,2026-01,10000,广州,10000,10000,,1000\n张三,110101199001011234,2026-02,10000,广州,10000,10000,,1000\n李四,110101199202022345,2026-01,8000,深圳,,,,-\n王五,110101199303033456,2026-01,9000,,,,,800';
     downloadFile(csv, '工资薪金个税计算模板.csv', 'text/csv');
   } else {
     const csv = '月份,金额,姓名,身份证号,电话,银行卡号\n2024年11月,15000,张三,110101199001011234,13800138000,6225880112345678\n2024/12,20000,张三,110101199001011234,13800138000,6225880112345678\n2025-01,18000,张三,110101199001011234,13800138000,6225880112345678\n2025-02,22000,张三,110101199001011234,13800138000,6225880112345678\n2024.11,8000,李四,,,6225880198765432\n2024.12,12000,李四,,,6225880198765432\n2025-01,9500,李四,,,6225880198765432';
@@ -3831,7 +4716,7 @@ async function downloadFile(content, filename, type) {
 }
 
 // ==================== Self tests ====================
-// 控制台自检：工资薪金累计预扣、反算、基数 clamp、劳务报酬回归。
+// 控制台自检：城市政策库、逐险种 clamp、年度匹配、工资累计预扣、反算、劳务回归。
 // 页面加载时自动运行，也可在控制台手动调用 runSelfTests() 查看明细。
 
 function runSelfTests() {
@@ -3841,24 +4726,52 @@ function runSelfTests() {
     t.push({ name, ok, actual, expected });
     return ok;
   };
+  const isTrue = (name, cond) => eq(name, cond ? 1 : 0, 1);
 
   const saved = JSON.parse(JSON.stringify(salaryParams));
-
-  // —— 三险一金与基数 clamp ——
+  salaryParams.policyYear = 'auto';
+  salaryParams.cityId = 'custom';
+  salaryParams.fundRate = 0.12;
   salaryParams.socialBase = 10000;
   salaryParams.fundBase = '';
-  salaryParams.baseLower = '';
-  salaryParams.baseUpper = '';
-  salaryParams.ratePension = 0.08; salaryParams.rateMedical = 0.02;
-  salaryParams.rateUnemployment = 0.005; salaryParams.rateFund = 0.12;
-  eq('三险一金 = 基数×22.5%', computeSocialInsurance(10000, ''), 2250);
+  salaryParams.extraDeduction = 1000;
 
-  salaryParams.baseLower = 4000;
-  eq('基数下限 clamp（3000→4000）', computeSocialInsurance(3000, ''), 4000 * 0.225);
-  salaryParams.baseLower = '';
-  salaryParams.baseUpper = 8000;
-  eq('基数上限 clamp（10000→8000）', computeSocialInsurance(10000, ''), 8000 * 0.225);
-  salaryParams.baseUpper = '';
+  // —— 自定义城市（承接首版行为）：养老8% 医疗2% 失业0.5% 公积金12%，无上下限 ——
+  eq('自定义城市三险一金 = 基数×22.5%', computeSocialInsurance(10000, ''), 2250);
+
+  // —— 城市政策：逐险种 clamp（广州2024年度：养老/失业下限4546，医疗下限7175，失业比例0.2%）——
+  const gz = resolvePolicy('guangzhou', '2025-06');
+  isTrue('广州2025-06 匹配2024年度', gz.yearKey === '2024');
+  const gzD = computeSocialInsuranceDetail(3000, '', gz.items, 0.05);
+  eq('广州低基数·养老按下限4546', gzD.pension, round2(4546 * 0.08));
+  eq('广州低基数·医疗按下限7175', gzD.medical, round2(7175 * 0.02));
+  eq('广州低基数·失业(0.2%)', gzD.unemployment, round2(4546 * 0.002));
+  eq('广州低基数·公积金(3000高于下限2300不clamp)', gzD.fund, round2(3000 * 0.05));
+  eq('广州低基数·合计', gzD.total, round2(4546 * 0.08 + 7175 * 0.02 + 4546 * 0.002 + 3000 * 0.05));
+  const gzHi = computeSocialInsuranceDetail(999999, '', gz.items, 0.05);
+  eq('广州高基数·养老按上限27501', gzHi.pension, round2(27501 * 0.08));
+
+  // —— 年度匹配：广州 7 月切换社保年度；固定年度覆盖 auto ——
+  isTrue('广州2025-07 匹配2025年度', resolvePolicy('guangzhou', '2025-07').yearKey === '2025');
+  isTrue('广州2024-06 匹配2023年度', resolvePolicy('guangzhou', '2024-06').yearKey === '2023');
+  salaryParams.policyYear = '2024';
+  isTrue('固定年度覆盖自动匹配', resolvePolicy('guangzhou', '2025-07').yearKey === '2024');
+  salaryParams.policyYear = 'auto';
+  isTrue('无匹配月份回退最新年度并标注', resolvePolicy('guangzhou', '2030-01').matched === false);
+
+  // —— 城市别名与未知城市 ——
+  isTrue('别名匹配「广州市」', findCityKey('广州市') === 'guangzhou');
+  isTrue('未知城市返回 null', findCityKey('火星市') == null);
+
+  // —— 广州 vs 深圳同薪差异（分城市政策生效）——
+  const sz = resolvePolicy('shenzhen', '2025-06');
+  const gz8000 = computeSocialInsuranceDetail(8000, '', gz.items, 0.05);
+  const sz8000 = computeSocialInsuranceDetail(8000, '', sz.items, 0.05);
+  isTrue('广州深圳同薪三险一金不同', gz8000.total !== sz8000.total);
+
+  // —— 政策库 JSON roundtrip ——
+  const snapshot = JSON.stringify(CITY_POLICY_LIBRARY);
+  isTrue('政策库导入导出 roundtrip', JSON.stringify(JSON.parse(snapshot)) === snapshot);
 
   // —— 工资薪金累计预扣（验收算例：月薪1万、三险一金2250、专项附加1000）——
   const ctx = { socialInsurance: 2250, extraDeduction: 1000 };
@@ -3913,7 +4826,9 @@ function runSelfTests() {
 
 // Init
 buildMonthGrid();
-readSalaryParams();
+const _spCitySel = document.getElementById('sp-city');
+if (_spCitySel) _spCitySel.innerHTML = buildCityOptions(salaryParams.cityId);
+onCityParamChange();
 setIncomeType('labor');
 runSelfTests();
 </script>

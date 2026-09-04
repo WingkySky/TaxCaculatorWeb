@@ -92,40 +92,40 @@ window.CITY_POLICY_LIBRARY_DATA = {
         items: {
           pension:      { personal: 0.08,  lower: 4546, upper: 26421 },
           medical:      { personal: 0.02,  lower: 7175, upper: 35875 },
-          unemployment: { personal: 0.002, lower: 4546, upper: 26421 },
+          unemployment: { personal: 0.002, lower: 2300, upper: 39579 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2300, upper: 38082 }
         }
       },
       '2024': {
-        label: '2024年度（2024-07 ~ 2025-06）',
+        label: '2024年度（2024-07 ~ 2025-06，医保按自然年为6236/31179；失业下限2025-03起2500）',
         effective: ['2024-07', '2025-06'],
         pending: true,
         items: {
           pension:      { personal: 0.08,  lower: 5500, upper: 27501 },
-          medical:      { personal: 0.02,  lower: 7175, upper: 35875 },
-          unemployment: { personal: 0.002, lower: 5500, upper: 27501 },
+          medical:      { personal: 0.02,  lower: 6236, upper: 31179 },
+          unemployment: { personal: 0.002, lower: 2300, upper: 39579 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2300, upper: 38082 }
         }
       },
       '2025': {
-        label: '2025年度（2025-07 ~ 2026-06）',
+        label: '2025年度（2025-07 ~ 2026-06；医保按自然年2025为6236/31179）',
         effective: ['2025-07', '2026-06'],
         pending: true,
         items: {
           pension:      { personal: 0.08,  lower: 5510, upper: 27549 },
-          medical:      { personal: 0.02,  lower: 7175, upper: 35875 },
-          unemployment: { personal: 0.002, lower: 5510, upper: 27549 },
-          fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2500, upper: 38082 }
+          medical:      { personal: 0.02,  lower: 6236, upper: 31179 },
+          unemployment: { personal: 0.002, lower: 2500, upper: 41112 },
+          fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2500, upper: 39828 }
         }
       },
       '2026': {
-        label: '2026年度（2026-07 ~ 2027-06，社保沿用2025年度；公积金下限2680自2026-09-01，粤府函〔2026〕188号）',
+        label: '2026年度（2026-07 ~ 2027-06，社保沿用2025年度；失业/公积金下限2680自2026-09-01随最低工资）',
         effective: ['2026-07', '2027-06'],
         pending: true,
         items: {
           pension:      { personal: 0.08,  lower: 5510, upper: 27549 },
-          medical:      { personal: 0.02,  lower: 7175, upper: 35875 },
-          unemployment: { personal: 0.002, lower: 5510, upper: 27549 },
+          medical:      { personal: 0.02,  lower: 6236, upper: 31179 },
+          unemployment: { personal: 0.002, lower: 2680, upper: 41112 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2680, upper: 41697 }
         }
       }
@@ -135,25 +135,25 @@ window.CITY_POLICY_LIBRARY_DATA = {
     name: '深圳',
     years: {
       '2025': {
-        label: '2025年度（2025-07 ~ 2026-06）',
+        label: '2025年度（2025-07 ~ 2026-06；医保按自然年，2026-01起为6727/33633，2025下半年为6922/34612待核对）',
         effective: ['2025-07', '2026-06'],
         pending: true,
         items: {
           pension:      { personal: 0.08,  lower: 4775, upper: 27549 },
           medical:      { personal: 0.02,  lower: 6727, upper: 33633 },
           unemployment: { personal: 0.003, lower: 2520, upper: 44265 },
-          fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2520, upper: 41168 }
+          fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2360, upper: 44265 }
         }
       },
       '2026': {
-        label: '2026年度（养老/失业沿用2025年度省口径；失业与公积金下限2700自2026-09-01随最低工资调整）',
+        label: '2026年度（养老/失业沿用省口径；失业与公积金下限2700自2026-09-01随最低工资，公积金上限沿用待核对）',
         effective: ['2026-07', '2027-06'],
         pending: true,
         items: {
           pension:      { personal: 0.08,  lower: 4775, upper: 27549 },
           medical:      { personal: 0.02,  lower: 6727, upper: 33633 },
           unemployment: { personal: 0.003, lower: 2700, upper: 48471 },
-          fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2700, upper: 41168 }
+          fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2700, upper: 44265 }
         }
       }
     }

@@ -4573,15 +4573,15 @@ function runSelfTests() {
   // —— 自定义城市（承接首版行为）：养老8% 医疗2% 失业0.5% 公积金12%，无上下限 ——
   eq('自定义城市三险一金 = 基数×22.5%', computeSocialInsurance(10000, ''), 2250);
 
-  // —— 城市政策：逐险种 clamp（广州2024年度：养老/失业下限5500，医疗下限7175，失业比例0.2%）——
+  // —— 城市政策：逐险种 clamp（广州2024年度：养老下限5500，医保按自然年6236，失业下限=最低工资2300）——
   const gz = resolvePolicy('guangzhou', '2025-06');
   isTrue('广州2025-06 匹配2024年度', gz.yearKey === '2024');
   const gzD = computeSocialInsuranceDetail(3000, '', gz.items, 0.05);
   eq('广州低基数·养老按下限5500', gzD.pension, round2(5500 * 0.08));
-  eq('广州低基数·医疗按下限7175', gzD.medical, round2(7175 * 0.02));
-  eq('广州低基数·失业(0.2%)', gzD.unemployment, round2(5500 * 0.002));
+  eq('广州低基数·医疗按下限6236', gzD.medical, round2(6236 * 0.02));
+  eq('广州低基数·失业(3000高于下限2300不clamp, 0.2%)', gzD.unemployment, round2(3000 * 0.002));
   eq('广州低基数·公积金(3000高于下限2300不clamp)', gzD.fund, round2(3000 * 0.05));
-  eq('广州低基数·合计', gzD.total, round2(5500 * 0.08 + 7175 * 0.02 + 5500 * 0.002 + 3000 * 0.05));
+  eq('广州低基数·合计', gzD.total, round2(5500 * 0.08 + 6236 * 0.02 + 3000 * 0.002 + 3000 * 0.05));
   const gzHi = computeSocialInsuranceDetail(999999, '', gz.items, 0.05);
   eq('广州高基数·养老按上限27501', gzHi.pension, round2(27501 * 0.08));
 
@@ -4611,6 +4611,17 @@ function runSelfTests() {
     return u.lower === 2700 && u.upper === 48471;
   })());
   isTrue('广州2025年度公积金下限2500（2025-03起旧最低工资）', resolvePolicy('guangzhou', '2025-09').items.fund.lower === 2500);
+
+  // —— 广深分险种口径核实（2025-09-04 检索）——
+  isTrue('广州2025社保年度失业=最低工资2500/上限41112', (() => {
+    const u = resolvePolicy('guangzhou', '2025-09').items.unemployment;
+    return u.lower === 2500 && u.upper === 41112;
+  })());
+  isTrue('广州医保按自然年：2025为6236/31179', resolvePolicy('guangzhou', '2025-09').items.medical.lower === 6236);
+  isTrue('深圳公积金2025年度=2360/44265（下限按2024最低工资口径）', (() => {
+    const f = resolvePolicy('shenzhen', '2025-09').items.fund;
+    return f.lower === 2360 && f.upper === 44265;
+  })());
 
   // —— Excel/JSON 扁平转换 roundtrip ——
   const rtLib = rowsToLibrary(libraryToRows(CITY_POLICY_LIBRARY)).library;

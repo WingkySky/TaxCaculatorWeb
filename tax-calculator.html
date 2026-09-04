@@ -809,8 +809,9 @@
         <div style="font-size:16px;font-weight:700;">🛠 城市社保公积金政策库</div>
         <button class="btn btn-secondary" style="margin-left:auto;padding:4px 12px;font-size:12px;" onclick="closePolicyModal()">✕ 关闭</button>
       </div>
+      <div id="pm-storage-status" class="info-box" style="margin-bottom:14px;"></div>
       <div class="info-box" style="margin-bottom:14px;">
-        政策数据来自同目录 <strong>tax-policy-data.js</strong>（拷贝该文件即可跨机使用）。数值多为公开资料整理的<strong>参考值</strong>（标注"待核对"），请以当地社保部门公布为准。可导出 <strong>Excel</strong> / JSON 维护后再导入覆盖；修改即时生效。
+        数据分三层：<strong>tax-policy-data.js</strong>（出厂种子，跨机拷贝即用）→ 本机浏览器自动存档（修改后即时保存，刷新自动加载）→ Excel / JSON 导出（人工备份与跨机同步）。数值为参考值，请以当地社保部门公布为准。
       </div>
       <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap;">
         <div class="sp-field" style="width:180px;"><label>城市</label><select id="pm-city" onchange="onPmCityChange()"></select></div>
@@ -818,6 +819,7 @@
         <button class="btn btn-secondary" style="padding:7px 12px;font-size:12px;" onclick="pmAddCity()">➕ 新增城市</button>
         <button class="btn btn-secondary" style="padding:7px 12px;font-size:12px;" onclick="pmAddYear()">➕ 新增年度</button>
         <button class="btn btn-secondary" style="padding:7px 12px;font-size:12px;" onclick="pmDeleteYear()">🗑 删除当前年度</button>
+        <button class="btn btn-secondary" style="padding:7px 12px;font-size:12px;" onclick="pmResetToSeed()">♻ 恢复数据文件默认</button>
       </div>
       <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
         <div class="sp-field" style="width:150px;"><label>生效起（YYYY-MM）</label><input class="pm-item-input" style="text-align:left;" id="pm-eff-start" onchange="onPmEffectiveChange()"></div>
@@ -1171,11 +1173,71 @@ const SI_ITEM_LABELS = { pension: '养老', medical: '医疗(含生育)', unempl
 
 const FUND_RATES_STD = [0.05, 0.06, 0.08, 0.10, 0.12];
 
+/* ==================== 政策库持久化（localStorage） ====================
+ * 数据分三层：
+ *   1. tax-policy-data.js —— 出厂种子（跨机拷贝即用）；
+ *   2. localStorage —— 本机自动存档：弹层编辑/导入后自动写入，刷新自动加载；
+ *   3. Excel / JSON 导出 —— 人工备份与跨机同步。
+ * localStorage 不跨浏览器、不跨电脑，清除浏览器数据会丢失；恢复种子用「恢复数据文件默认」。
+ */
+const POLICY_LIB_STORAGE_KEY = 'taxPolicyLibrary_v1';
+
+function policyStorageAvailable() {
+  try {
+    const k = POLICY_LIB_STORAGE_KEY + '__probe__';
+    localStorage.setItem(k, '1');
+    localStorage.removeItem(k);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** 从 localStorage 读取本机存档；无数据或不可用时返回 null */
+function loadPolicyLibrary() {
+  try {
+    const raw = localStorage.getItem(POLICY_LIB_STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== 'object' || !Object.keys(data).length) return null;
+    window._policySavedAt = data.__savedAt || '';
+    delete data.__savedAt;
+    window._policyFromStorage = true;
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** 政策库变更后写本机存档；不可用时静默降级（弹层会提示仅本次会话有效） */
+function savePolicyLibrary() {
+  try {
+    const payload = JSON.parse(JSON.stringify(CITY_POLICY_LIBRARY));
+    const d = new Date();
+    window._policySavedAt = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    payload.__savedAt = window._policySavedAt;
+    localStorage.setItem(POLICY_LIB_STORAGE_KEY, JSON.stringify(payload));
+    window._policyFromStorage = true;
+    window._policyStorageAvailable = true;
+    return true;
+  } catch (e) {
+    window._policyStorageAvailable = false;
+    console.warn('政策库本地存档失败（当前环境可能禁用了 localStorage）：', e.message);
+    return false;
+  }
+}
+
+function clearPolicyLibraryStorage() {
+  try { localStorage.removeItem(POLICY_LIB_STORAGE_KEY); } catch (e) { /* 忽略 */ }
+}
+
 /* 政策库数据外置在同目录 tax-policy-data.js（跨机使用时拷贝该文件即可自动加载）。
- * 未随附该文件时仅保留「自定义」城市，可在「政策数据管理」中编辑或导入 Excel/JSON。 */
-const CITY_POLICY_LIBRARY = (window.CITY_POLICY_LIBRARY_DATA && typeof window.CITY_POLICY_LIBRARY_DATA === 'object')
-  ? window.CITY_POLICY_LIBRARY_DATA
-  : {
+ * 加载优先级：本机 localStorage 存档 > tax-policy-data.js 种子 > 仅「自定义」城市。 */
+const CITY_POLICY_LIBRARY = loadPolicyLibrary() ||
+  ((window.CITY_POLICY_LIBRARY_DATA && typeof window.CITY_POLICY_LIBRARY_DATA === 'object')
+    ? window.CITY_POLICY_LIBRARY_DATA
+    : {
       custom: {
         name: '自定义',
         years: {
@@ -1192,7 +1254,8 @@ const CITY_POLICY_LIBRARY = (window.CITY_POLICY_LIBRARY_DATA && typeof window.CI
           }
         }
       }
-    };
+    });
+window._policyStorageAvailable = policyStorageAvailable();
 
 /* 数据文件是否缺失（仅剩自定义城市） */
 function isPolicyDataFileMissing() {
@@ -1505,7 +1568,23 @@ function onPmYearChange() {
   renderPolicyEditor();
 }
 
+/** 弹层顶部存储状态提示 */
+function updatePmStorageStatus() {
+  const el = document.getElementById('pm-storage-status');
+  if (!el) return;
+  if (window._policyStorageAvailable === false) {
+    el.innerHTML = '⚠️ 当前浏览器环境不支持本地存储（如隐私模式），修改仅本次会话有效——请务必导出 Excel / JSON 备份。';
+    return;
+  }
+  if (window._policyFromStorage) {
+    el.innerHTML = `💾 政策数据已自动保存到本机浏览器（localStorage${window._policySavedAt ? '，更新于 ' + window._policySavedAt : ''}），刷新/重启后自动加载。<strong>不跨浏览器、不跨电脑，清除浏览器数据会丢失</strong>——跨机或长期备份请导出 Excel / JSON。`;
+  } else {
+    el.innerHTML = '当前使用 tax-policy-data.js 的默认数据；在下方修改后会自动保存到本机浏览器，之后每次打开自动加载。';
+  }
+}
+
 function renderPolicyEditor() {
+  updatePmStorageStatus();
   const lib = CITY_POLICY_LIBRARY[window._pmCity];
   const rec = lib && lib.years[window._pmYear];
   const effStart = document.getElementById('pm-eff-start');
@@ -1561,6 +1640,7 @@ function onPmItemInput(cityKey, yk, itemKey, field, value) {
   }
   delete it.pending;
   _policyCache.clear();
+  savePolicyLibrary();
   renderPolicyEditor();
   renderSalaryItemsTable();
 }
@@ -1573,6 +1653,7 @@ function onPmFundRatesInput(value) {
   const rates = String(value).split(/[,，]/).map(s => parseFloat(s) / 100).filter(n => !isNaN(n) && n > 0);
   if (rates.length) { it.rates = rates; delete it.pending; }
   _policyCache.clear();
+  savePolicyLibrary();
   renderSalaryItemsTable();
 }
 
@@ -1585,6 +1666,7 @@ function onPmEffectiveChange() {
   const ymRe = /^\d{4}-\d{2}$/;
   rec.effective = [ymRe.test(s) ? s : '2000-01', ymRe.test(e) ? e : '2999-12'];
   _policyCache.clear();
+  savePolicyLibrary();
   renderSalaryItemsTable();
 }
 
@@ -1592,6 +1674,9 @@ function onPmLabelChange() {
   const lib = CITY_POLICY_LIBRARY[window._pmCity];
   const rec = lib && lib.years[window._pmYear];
   if (rec) rec.label = document.getElementById('pm-label').value.trim() || window._pmYear;
+  _policyCache.clear();
+  savePolicyLibrary();
+  renderSalaryItemsTable();
 }
 
 function pmAddCity() {
@@ -1616,6 +1701,8 @@ function pmAddCity() {
       }
     }
   };
+  _policyCache.clear();
+  savePolicyLibrary();
   window._pmCity = key;
   onPmCityChange();
 }
@@ -1632,6 +1719,8 @@ function pmAddYear() {
     pending: true,
     items: JSON.parse(JSON.stringify(Object.values(lib.years)[0].items))
   };
+  _policyCache.clear();
+  savePolicyLibrary();
   window._pmYear = key;
   onPmCityChange();
 }
@@ -1644,7 +1733,36 @@ function pmDeleteYear() {
   delete lib.years[window._pmYear];
   window._pmYear = Object.keys(lib.years)[0];
   _policyCache.clear();
+  savePolicyLibrary();
   onPmCityChange();
+}
+
+/** 清除本机存档，恢复为 tax-policy-data.js 种子数据 */
+function pmResetToSeed() {
+  if (!confirm('将清除本机浏览器中保存的政策数据，恢复为 tax-policy-data.js 中的默认数据，确认？')) return;
+  clearPolicyLibraryStorage();
+  const seed = (window.CITY_POLICY_LIBRARY_DATA && typeof window.CITY_POLICY_LIBRARY_DATA === 'object')
+    ? JSON.parse(JSON.stringify(window.CITY_POLICY_LIBRARY_DATA))
+    : null;
+  Object.keys(CITY_POLICY_LIBRARY).forEach(k => delete CITY_POLICY_LIBRARY[k]);
+  if (seed) {
+    Object.assign(CITY_POLICY_LIBRARY, seed);
+  } else if (!CITY_POLICY_LIBRARY.custom) {
+    CITY_POLICY_LIBRARY.custom = {
+      name: '自定义',
+      years: { custom: { label: '自定义政策', effective: ['2000-01', '2999-12'], pending: true, items: {
+        pension: siItem(0.08, null, null), medical: siItem(0.02, null, null),
+        unemployment: siItem(0.005, null, null), fund: fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
+      } } }
+    };
+  }
+  if (!CITY_POLICY_LIBRARY[salaryParams.cityId]) salaryParams.cityId = 'custom';
+  window._pmCity = CITY_POLICY_LIBRARY[salaryParams.cityId] ? salaryParams.cityId : Object.keys(CITY_POLICY_LIBRARY)[0];
+  window._policyFromStorage = false;
+  window._policySavedAt = '';
+  _policyCache.clear();
+  onPmCityChange();
+  onCityParamChange();
 }
 
 function pmExportJSON() {
@@ -1762,6 +1880,7 @@ function applyImportedLibrary(lib, errors) {
   if (!CITY_POLICY_LIBRARY[salaryParams.cityId]) salaryParams.cityId = 'custom';
   window._pmCity = Object.keys(CITY_POLICY_LIBRARY)[0];
   _policyCache.clear();
+  savePolicyLibrary();
   onPmCityChange();
   onCityParamChange();
   alert(`导入成功：${Object.keys(CITY_POLICY_LIBRARY).length} 个城市${errors && errors.length ? `（${errors.length} 条问题行已跳过，详见控制台）` : ''}`);

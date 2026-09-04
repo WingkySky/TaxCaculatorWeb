@@ -17,10 +17,12 @@
  *
  * 数据说明（更新于 2026-09-04）：
  *   · 北京/上海/广州/深圳/杭州/江苏/重庆等 2026 年度数据按公开报道整理；
+ *   · 广东最低工资自 2026-09-01 调整（粤府函〔2026〕188号：广州 2680、深圳 2700），
+ *     广州公积金下限同步调为 2680；深圳失业保险下限（按最低工资）调为 2700/48471，
+ *     深圳公积金下限 2700 同步生效；
  *   · 广东省（广州/深圳）2026 社保年度惯例 10 月前后公布，当前数值为
  *     沿用 2025 年度的过渡值，公布后请更新；
- *   · 深圳医保按自然年公布（2026 年 6727/33633）；公积金下限 2700 元
- *     自 2026-09-01 起适用于新参加工作/新调入职工；
+ *   · 深圳医保按自然年公布（2026 年 6727/33633）；
  *   · 武汉、天津 2026 年度暂未检索到官方数字，沿用旧参考值（待核对）。
  *   · 所有数据请以当地社保部门公布为准。
  * ============================================================ */
@@ -113,18 +115,18 @@ window.CITY_POLICY_LIBRARY_DATA = {
           pension:      { personal: 0.08,  lower: 5510, upper: 27549 },
           medical:      { personal: 0.02,  lower: 7175, upper: 35875 },
           unemployment: { personal: 0.002, lower: 5510, upper: 27549 },
-          fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2300, upper: 38082 }
+          fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2500, upper: 38082 }
         }
       },
       '2026': {
-        label: '2026年度（2026-07 ~ 2027-06，社保沿用2025年度，待广东公布）',
+        label: '2026年度（2026-07 ~ 2027-06，社保沿用2025年度；公积金下限2680自2026-09-01，粤府函〔2026〕188号）',
         effective: ['2026-07', '2027-06'],
         pending: true,
         items: {
           pension:      { personal: 0.08,  lower: 5510, upper: 27549 },
           medical:      { personal: 0.02,  lower: 7175, upper: 35875 },
           unemployment: { personal: 0.002, lower: 5510, upper: 27549 },
-          fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2500, upper: 41697 }
+          fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2680, upper: 41697 }
         }
       }
     }
@@ -140,17 +142,17 @@ window.CITY_POLICY_LIBRARY_DATA = {
           pension:      { personal: 0.08,  lower: 4775, upper: 27549 },
           medical:      { personal: 0.02,  lower: 6727, upper: 33633 },
           unemployment: { personal: 0.003, lower: 2520, upper: 44265 },
-          fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2360, upper: 41168 }
+          fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2520, upper: 41168 }
         }
       },
       '2026': {
-        label: '2026年度（2026-07 ~ 2027-06，养老/失业沿用2025年度，待广东公布）',
+        label: '2026年度（养老/失业沿用2025年度省口径；失业与公积金下限2700自2026-09-01随最低工资调整）',
         effective: ['2026-07', '2027-06'],
         pending: true,
         items: {
           pension:      { personal: 0.08,  lower: 4775, upper: 27549 },
           medical:      { personal: 0.02,  lower: 6727, upper: 33633 },
-          unemployment: { personal: 0.003, lower: 2520, upper: 44265 },
+          unemployment: { personal: 0.003, lower: 2700, upper: 48471 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2700, upper: 41168 }
         }
       }

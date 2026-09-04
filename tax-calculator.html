@@ -4604,6 +4604,14 @@ function runSelfTests() {
   isTrue('上海2026-07 养老下限7546', resolvePolicy('shanghai', '2026-07').items.pension.lower === 7546);
   isTrue('深圳2026-09 公积金下限2700（2026-09-01起新职工）', resolvePolicy('shenzhen', '2026-09').items.fund.lower === 2700);
 
+  // —— 广东 2026-09-01 最低工资调整（粤府函〔2026〕188号）——
+  isTrue('广州2026-09 公积金下限2680（随最低工资）', resolvePolicy('guangzhou', '2026-09').items.fund.lower === 2680);
+  isTrue('深圳2026-09 失业下限2700/上限48471（随最低工资）', (() => {
+    const u = resolvePolicy('shenzhen', '2026-09').items.unemployment;
+    return u.lower === 2700 && u.upper === 48471;
+  })());
+  isTrue('广州2025年度公积金下限2500（2025-03起旧最低工资）', resolvePolicy('guangzhou', '2025-09').items.fund.lower === 2500);
+
   // —— Excel/JSON 扁平转换 roundtrip ——
   const rtLib = rowsToLibrary(libraryToRows(CITY_POLICY_LIBRARY)).library;
   isTrue('政策库 Excel 扁平转换 roundtrip', JSON.stringify(rtLib) === JSON.stringify(CITY_POLICY_LIBRARY));

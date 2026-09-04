@@ -794,7 +794,7 @@
     <div style="overflow-x:auto;margin-bottom:10px;">
       <table class="result-table" id="sp-items-table" style="font-size:12px;"></table>
     </div>
-    <div style="font-size:12px;color:var(--text2);">⚠️ 政策数据为参考值，请以当地社保部门公布为准，可在「政策数据管理」中修改或导入。批量计算时，行内「城市 / 社保基数 / 公积金基数 / 三险一金」列优先于上述设置。</div>
+    <div style="font-size:12px;color:var(--text2);">⚠️ 政策数据为参考值，请以当地社保部门公布为准，可在「政策数据管理」中修改或导入。社保保留到分；公积金月缴存额按惯例四舍五入取整到元。批量计算时，行内「城市 / 社保基数 / 公积金基数 / 三险一金」列优先于上述设置。</div>
   </div>
 
   <!-- 政策数据管理弹层 -->
@@ -1279,6 +1279,7 @@ function clampItemBase(base, item) {
 
 /**
  * 三险一金个人部分（月），逐险种 clamp 后乘比例
+ * 社保保留到分（round2）；公积金月缴存额按惯例四舍五入取整到元
  * @returns {{pension, medical, unemployment, fund, total}} 各险种实缴与合计（round2）
  */
 function computeSocialInsuranceDetail(socialBase, fundBase, items, fundRate) {
@@ -1287,7 +1288,7 @@ function computeSocialInsuranceDetail(socialBase, fundBase, items, fundRate) {
   const medical = clampItemBase(socialBase, items.medical) * items.medical.personal;
   const unemployment = clampItemBase(socialBase, items.unemployment) * items.unemployment.personal;
   const rawFund = (fundBase === '' || fundBase == null || isNaN(parseFloat(fundBase))) ? socialBase : fundBase;
-  const fund = clampItemBase(rawFund, items.fund) * fr;
+  const fund = Math.round(clampItemBase(rawFund, items.fund) * fr);
   return {
     pension: round2(pension),
     medical: round2(medical),
@@ -2053,7 +2054,7 @@ function renderMultiResults(results) {
   const outLabel = isSalary
     ? (multiDirection === 'forward' ? '实发工资' : '应发工资（反算）')
     : (multiDirection === 'forward' ? '税后收入' : '税前收入（反算）');
-  const colCount = isSalary ? 11 : 10;
+  const colCount = isSalary ? 12 : 11;
 
   // 按年分组
   const yearGroups = {};
@@ -2094,8 +2095,9 @@ function renderMultiResults(results) {
             ? `<td${r._siDetail ? ` title="养老 ¥${formatNum(r._siDetail.pension)} / 医疗 ¥${formatNum(r._siDetail.medical)} / 失业 ¥${formatNum(r._siDetail.unemployment)} / 公积金 ¥${formatNum(r._siDetail.fund)}"` : ''}>¥${formatNum(r.socialInsurance)}</td><td>¥${formatNum(r.extraDeduction)}</td>`
             : `<td>¥${formatNum(r.withholdingIncome)}</td>`}
           <td>¥${formatNum(r.cumIncome)}</td>
+          <td>¥${formatNum(r.cumDeduction)}</td>
           <td>¥${formatNum(r.taxableIncome)}</td>
-          <td>${(r.rate * 100)}%</td>
+          <td>${(r.rate * 100)}%<div style="font-size:10px;color:var(--text2);">速算 ${formatNum(r.quick)}</div></td>
           <td class="tax-col">¥${formatNum(r.currentTax)}</td>
           <td class="highlight">¥${formatNum(multiDirection === 'forward' ? r.postTax : r.preTax)}</td>
           <td>${isSalary ? '累计预扣' : (r._isOldPolicy ? '旧政策' : '新政策')}</td>
@@ -2108,7 +2110,7 @@ function renderMultiResults(results) {
         <td colspan="2" style="text-align:right;color:var(--text2);">${yr} 年小计</td>
         <td>¥${formatNum(multiDirection === 'forward' ? yPre : yPost)}</td>
         ${isSalary ? '<td></td><td></td>' : '<td></td>'}
-        <td></td><td></td><td></td>
+        <td></td><td></td><td></td><td></td>
         <td class="tax-col">¥${formatNum(yTax)}</td>
         <td class="highlight">¥${formatNum(multiDirection === 'forward' ? yPost : yPre)}</td>
         <td></td>
@@ -2153,6 +2155,7 @@ function renderMultiResults(results) {
               <th>${inLabel}</th>
               ${isSalary ? '<th>三险一金(个人)</th><th>专项附加</th>' : '<th>本次预扣收入额</th>'}
               <th>累计发放金额</th>
+              <th>累计减除费用</th>
               <th>累计应纳税所得额</th>
               <th>适用税率</th>
               <th>本期预扣税额</th>
@@ -2169,6 +2172,7 @@ function renderMultiResults(results) {
                 ? `<td>¥${formatNum(totalSI)}</td><td>¥${formatNum(totalExtra)}</td>`
                 : `<td>¥${formatNum(results.reduce((s,r) => s + r.withholdingIncome, 0))}</td>`}
               <td></td>
+              <td>¥${formatNum(results.reduce((s,r) => s + (r.cumDeduction || 0), 0))}</td>
               <td></td>
               <td></td>
               <td class="tax-col">¥${formatNum(totalTax)}</td>
@@ -2197,14 +2201,14 @@ function exportMultiCSV() {
     : (multiDirection === 'forward' ? '税后收入' : '税前收入（反算）');
   let header, rows;
   if (isSalary) {
-    header = `月份,备注,${preLabel},三险一金(个人),专项附加扣除,累计发放金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},计税方式\n`;
+    header = `月份,备注,${preLabel},三险一金(个人),专项附加扣除,累计发放金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},计税方式\n`;
     rows = results.map(r =>
-      `${r.month},${r.note},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.socialInsurance || 0)},${round2(r.extraDeduction || 0)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},累计预扣`
+      `${r.month},${r.note},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.socialInsurance || 0)},${round2(r.extraDeduction || 0)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},累计预扣`
     ).join('\n');
   } else {
-    header = `月份,备注,${preLabel},本次预扣收入额,累计发放金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},政策类型\n`;
+    header = `月份,备注,${preLabel},本次预扣收入额,累计发放金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},政策类型\n`;
     rows = results.map(r =>
-      `${r.month},${r.note},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},${r._isOldPolicy ? '旧政策' : '新政策'}`
+      `${r.month},${r.note},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},${r._isOldPolicy ? '旧政策' : '新政策'}`
     ).join('\n');
   }
   downloadFile(header + rows, '多月个税计算结果.csv', 'text/csv');
@@ -4276,7 +4280,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
     let yearSections = '';
     years.forEach((yr, yi) => {
       const yRows = yearGroups[yr];
-      const gapColspan = (isSalary ? 12 : 8) + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
+      const gapColspan = (isSalary ? 13 : 9) + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
       const yearSep = yi > 0
         ? `<tr style="background:rgba(108,92,231,0.12);"><td colspan="${gapColspan}" style="text-align:center;padding:10px;font-weight:700;color:var(--accent2);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`
         : '';
@@ -4313,7 +4317,8 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
             <td>¥${formatNum(batchDirection === 'forward' ? r.preTax : r.postTax)}</td>
             ${isSalary ? `<td${siTitle}${r._siMissing ? ' style="color:var(--orange);"' : ''}>¥${formatNum(r.socialInsurance || 0)}${r._siMissing ? ' ⚠' : ''}</td><td>¥${formatNum(r.extraDeduction || 0)}</td>` : ''}
             <td>¥${formatNum(r.cumIncome)}</td>
-            <td>${(r.rate * 100)}%</td>
+            <td>¥${formatNum(r.cumDeduction)}</td>
+            <td>${(r.rate * 100)}%<div style="font-size:10px;color:var(--text2);">速算 ${formatNum(r.quick)}</div></td>
             <td class="tax-col">¥${formatNum(r.currentTax)}</td>
             <td class="highlight">¥${formatNum(batchDirection === 'forward' ? r.postTax : r.preTax)}</td>
             <td>${isSalary ? '累计预扣' : (r._isOldPolicy ? '旧政策' : '新政策')}</td>
@@ -4344,6 +4349,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
                 <th>${preColLabel}</th>
                 ${isSalary ? '<th>三险一金(个人)</th><th>专项附加</th>' : ''}
                 <th>${isSalary ? '累计应发金额' : '累计发放金额'}</th>
+                <th>累计减除费用</th>
                 <th>适用税率</th>
                 <th>预扣税额</th>
                 <th>${postColLabel}</th>
@@ -4357,6 +4363,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
                 <td>¥${formatNum(batchDirection === 'forward' ? personPre : personPost)}</td>
                 ${isSalary ? `<td></td><td></td><td>¥${formatNum(rows.reduce((s, r) => s + (r.socialInsurance || 0), 0))}</td><td>¥${formatNum(rows.reduce((s, r) => s + (r.extraDeduction || 0), 0))}</td>` : ''}
                 <td></td>
+                <td>¥${formatNum(rows.reduce((s, r) => s + (r.cumDeduction || 0), 0))}</td>
                 <td></td>
                 <td class="tax-col">¥${formatNum(personTax)}</td>
                 <td class="highlight">¥${formatNum(batchDirection === 'forward' ? personPost : personPre)}</td>
@@ -4431,9 +4438,9 @@ function exportBatchCSV() {
   if (hasPhone) headerCols += ',电话';
   if (hasBankCard) headerCols += ',银行卡号';
   if (isSalary) {
-    headerCols += `,月份,城市,政策年度,${preLabel},三险一金(个人),专项附加扣除,累计应发金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},计税方式`;
+    headerCols += `,月份,城市,政策年度,${preLabel},三险一金(个人),专项附加扣除,累计应发金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},计税方式`;
   } else {
-    headerCols += `,月份,${preLabel},本次预扣收入额,累计发放金额,累计应纳税所得额,适用税率,本期预扣税额,${postLabel},政策类型`;
+    headerCols += `,月份,${preLabel},本次预扣收入额,累计发放金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},政策类型`;
   }
 
   const rows = sorted.map(r => {
@@ -4444,9 +4451,9 @@ function exportBatchCSV() {
     const inAmt = round2(batchDirection === 'forward' ? r.preTax : r.postTax);
     const outAmt = round2(batchDirection === 'forward' ? r.postTax : r.preTax);
     if (isSalary) {
-      cols += `,"${r.month}","${r.cityName || ''}","${r.policyYearLabel || ''}",${inAmt},${round2(r.socialInsurance || 0)},${round2(r.extraDeduction || 0)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${outAmt},累计预扣${r._siMissing ? '(三险一金未设置)' : ''}${r._cityUnknown ? '(城市未识别)' : ''}${r._yearFallback ? '(年度未匹配)' : ''}`;
+      cols += `,"${r.month}","${r.cityName || ''}","${r.policyYearLabel || ''}",${inAmt},${round2(r.socialInsurance || 0)},${round2(r.extraDeduction || 0)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${outAmt},累计预扣${r._siMissing ? '(三险一金未设置)' : ''}${r._cityUnknown ? '(城市未识别)' : ''}${r._yearFallback ? '(年度未匹配)' : ''}`;
     } else {
-      cols += `,"${r.month}",${inAmt},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.currentTax)},${outAmt},${r._isOldPolicy ? '旧政策' : '新政策'}`;
+      cols += `,"${r.month}",${inAmt},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${outAmt},${r._isOldPolicy ? '旧政策' : '新政策'}`;
     }
     return cols;
   }).join('\n');
@@ -4572,6 +4579,12 @@ function runSelfTests() {
 
   // —— 自定义城市（承接首版行为）：养老8% 医疗2% 失业0.5% 公积金12%，无上下限 ——
   eq('自定义城市三险一金 = 基数×22.5%', computeSocialInsurance(10000, ''), 2250);
+
+  // —— 公积金月缴存额四舍五入取整到元 ——
+  const customItems = resolvePolicy('custom', '2026-01').items;
+  eq('公积金取整·500.5→501', computeSocialInsuranceDetail(10010, '', customItems, 0.05).fund, 501);
+  eq('公积金取整·500.2→500', computeSocialInsuranceDetail(10004, '', customItems, 0.05).fund, 500);
+  eq('公积金取整·公积金基数单独生效', computeSocialInsuranceDetail(10000, 8000, customItems, 0.12).fund, 960);
 
   // —— 城市政策：逐险种 clamp（广州2024年度：养老下限5500，医保按自然年6236，失业下限=最低工资2300）——
   const gz = resolvePolicy('guangzhou', '2025-06');

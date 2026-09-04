@@ -791,6 +791,11 @@
       <div class="sp-field"><label>公积金基数（元/月）</label><input type="number" id="sp-fund-base" min="0" step="0.01" placeholder="留空跟随社保基数" oninput="readSalaryParams()"></div>
       <div class="sp-field"><label>专项附加扣除（元/月）</label><input type="number" id="sp-extra-deduction" min="0" step="0.01" placeholder="如 1500" oninput="readSalaryParams()"></div>
     </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;font-size:12px;color:var(--text2);">
+      <span>政策预览月份：</span>
+      <input type="month" id="sp-preview-month" onchange="renderSalaryItemsTable()" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;">
+      <span>实际计算按<strong style="color:var(--text);">每笔发放月份</strong>自动匹配政策年度（如 2026 年 1~6 月适用 2025 社保年度标准）；切换上方月份可预览该月适用的上下限与实缴。</span>
+    </div>
     <div style="overflow-x:auto;margin-bottom:10px;">
       <table class="result-table" id="sp-items-table" style="font-size:12px;"></table>
     </div>
@@ -1378,7 +1383,7 @@ function onCityParamChange() {
   readSalaryParams();
 }
 
-/** 渲染参数卡中的险种政策明细表（只读） */
+/** 渲染参数卡中的险种政策明细表（只读；预览月份默认当前月，可切换） */
 function renderSalaryItemsTable() {
   const el = document.getElementById('sp-items-table');
   if (!el) return;
@@ -1386,13 +1391,16 @@ function renderSalaryItemsTable() {
   if (missingEl) missingEl.style.display = isPolicyDataFileMissing() ? '' : 'none';
   const now = new Date();
   const nowYM = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-  const pol = resolvePolicy(salaryParams.cityId, nowYM);
+  const prevInput = document.getElementById('sp-preview-month');
+  if (prevInput && !prevInput.value) prevInput.value = nowYM;
+  const previewYM = (prevInput && /^\d{4}-\d{2}$/.test(prevInput.value)) ? prevInput.value : nowYM;
+  const pol = resolvePolicy(salaryParams.cityId, previewYM);
   const det = computeSocialInsuranceDetail(salaryParams.socialBase, salaryParams.fundBase, pol.items, salaryParams.fundRate);
   const fmtBound = (v) => (v == null ? '不限' : formatNum(v));
   el.innerHTML = `
     <thead>
       <tr>
-        <th colspan="5" style="text-align:left;color:var(--text2);font-weight:500;">适用政策：${pol.label}${pol.matched ? '' : '（未精确匹配月份，已用最新年度）'}${pol.items && CITY_POLICY_LIBRARY[pol.cityKey].years[pol.yearKey].pending ? ' · 参考值待核对' : ''}</th>
+        <th colspan="5" style="text-align:left;color:var(--text2);font-weight:500;">适用政策（按预览月份 ${previewYM} 匹配）：${pol.label}${pol.matched ? '' : '（未精确匹配月份，已用最新年度）'}${pol.items && CITY_POLICY_LIBRARY[pol.cityKey].years[pol.yearKey].pending ? ' · 参考值待核对' : ''}</th>
       </tr>
       <tr><th>险种</th><th>个人比例</th><th>基数下限</th><th>基数上限</th><th>按当前基数实缴</th></tr>
     </thead>

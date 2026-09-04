@@ -1455,8 +1455,11 @@ window._pmYear = '';
 
 function openPolicyModal() {
   document.getElementById('policy-modal').style.display = '';
-  const cityKeys = Object.keys(CITY_POLICY_LIBRARY);
-  if (!cityKeys.includes(window._pmCity)) window._pmCity = 'custom';
+  // 首次打开跟随当前工资参数中的城市，之后记住上次编辑的城市
+  if (!window._pmModalInitialized && CITY_POLICY_LIBRARY[salaryParams.cityId]) {
+    window._pmCity = salaryParams.cityId;
+  }
+  window._pmModalInitialized = true;
   onPmCityChange();
 }
 
@@ -1471,8 +1474,13 @@ function pmCityOptionsHTML() {
 
 function onPmCityChange() {
   const sel = document.getElementById('pm-city');
-  window._pmCity = sel.value;
-  if (!CITY_POLICY_LIBRARY[window._pmCity]) window._pmCity = 'custom';
+  // 每次按政策库重建城市选项（首次打开/新增城市/导入后保持同步）；
+  // 用户切换时优先采用下拉当前值，失效时回退到上次城市或自定义。
+  const wanted = sel.value || window._pmCity;
+  sel.innerHTML = pmCityOptionsHTML();
+  window._pmCity = CITY_POLICY_LIBRARY[wanted] ? wanted
+    : (CITY_POLICY_LIBRARY[window._pmCity] ? window._pmCity : 'custom');
+  sel.value = window._pmCity;
   const city = CITY_POLICY_LIBRARY[window._pmCity];
   const yearKeys = Object.keys(city.years);
   if (!yearKeys.includes(window._pmYear)) window._pmYear = yearKeys[0];

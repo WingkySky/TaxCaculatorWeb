@@ -799,7 +799,7 @@
     <div style="overflow-x:auto;margin-bottom:10px;">
       <table class="result-table" id="sp-items-table" style="font-size:12px;"></table>
     </div>
-    <div style="font-size:12px;color:var(--text2);">⚠️ 政策数据为参考值，请以当地社保部门公布为准，可在「政策数据管理」中修改或导入。社保保留到分；公积金月缴存额按惯例四舍五入取整到元。批量计算时，行内「城市 / 社保基数 / 公积金基数 / 三险一金」列优先于上述设置。</div>
+    <div style="font-size:12px;color:var(--text2);">⚠️ 政策数据为参考值，请以当地社保部门公布为准，可在「政策数据管理」中修改或导入。社保保留到分；公积金月缴存额按惯例四舍五入取整到元。批量计算时，行内「城市 / 社保基数 / 公积金基数 / 公积金比例」列优先于上述设置。</div>
   </div>
 
   <!-- 政策数据管理弹层 -->
@@ -908,7 +908,7 @@
           <strong>📋 表格格式要求（工资薪金）：</strong><br>
           <strong>识别列（至少填一项）：</strong><strong>姓名</strong>、<strong>身份证号</strong>、<strong>电话</strong>、<strong>银行卡号</strong><br>
           <strong>数据列：</strong><strong>月份</strong>、<strong>应发工资</strong>（或实发工资，按计算方向选择）<br>
-          <strong>可选列：</strong><strong>城市</strong>（广州/深圳等，按行内城市政策计算）、<strong>社保基数</strong>、<strong>公积金基数</strong>、<strong>三险一金</strong>（个人部分金额）、<strong>专项附加扣除</strong>——行内有值时优先使用，缺失时回退到整批城市选择和「工资参数」全局设置<br>
+          <strong>可选列：</strong><strong>城市</strong>（广州/深圳等，按行内城市政策计算）、<strong>社保基数</strong>、<strong>公积金基数</strong>、<strong>公积金比例</strong>（按行择档，填 5 = 5%，兼容 0.05、"5%"）、<strong>专项附加扣除</strong>——行内有值时优先使用，缺失时回退到整批城市选择和「工资参数」全局设置；三险一金按基数×城市政策自动计算，无需导入<br>
           <em>列顺序不限，系统自动识别，可在列映射界面手动调整。每人按月累计预扣，同月多笔合并计税，跨年自动重置，不适用断月重置。政策上下限/比例为参考值，请以当地公布为准。</em>
         </div>
       </div>
@@ -1348,7 +1348,7 @@ function clampItemBase(base, item) {
 /**
  * 三险一金个人部分（月），逐险种 clamp 后乘比例
  * 社保保留到分（round2）；公积金月缴存额按惯例四舍五入取整到元
- * @returns {{pension, medical, unemployment, fund, total}} 各险种实缴与合计（round2）
+ * @returns {{pension, medical, unemployment, fund, total, fundRateUsed}} 各险种实缴与合计（round2）；fundRateUsed 为实际生效的公积金比例
  */
 function computeSocialInsuranceDetail(socialBase, fundBase, items, fundRate) {
   const fr = (fundRate == null || fundRate === '' || isNaN(Number(fundRate))) ? (items.fund.personal || 0) : Number(fundRate);
@@ -1362,7 +1362,8 @@ function computeSocialInsuranceDetail(socialBase, fundBase, items, fundRate) {
     medical: round2(medical),
     unemployment: round2(unemployment),
     fund: round2(fund),
-    total: round2(pension + medical + unemployment + fund)
+    total: round2(pension + medical + unemployment + fund),
+    fundRateUsed: fr
   };
 }
 
@@ -3088,12 +3089,12 @@ const COL_KEYWORDS = [
     exclude: null
   },
   {
-    type: 'socialInsurance',
+    type: 'fundRate',
     patterns: [
-      /^(三险一金|五险一金|专项扣除|社保扣款|社保扣费|社保费用|社保个人部分|个人社保|公积金扣款|社保公积金)$/i,
-      /(三险一金|五险一金|专项扣除)|社保.{0,4}(扣|个人|费用)|公积金.{0,4}(扣款|个人|费用)/i
+      /^(公积金比例|公积金缴存比例|公积金个人比例|住房公积金比例|公积金缴存档|缴存比例|公积金档位|个人缴存比例)$/i,
+      /公积金.{0,8}(比例|档)/i
     ],
-    exclude: /专项附加|基数/i
+    exclude: /基数/i
   },
   {
     type: 'extraDeduction',
@@ -3160,7 +3161,7 @@ const COL_TYPE_LABELS = {
   amount:    '💰 金额',
   socialBase:     '🧮 社保基数',
   fundBase:       '🏠 公积金基数',
-  socialInsurance:'🛡️ 三险一金(个人)',
+  fundRate:       '📊 公积金比例',
   extraDeduction: '➕ 专项附加扣除',
   city:           '🏙️ 城市',
   idCard:    '🪪 身份证',
@@ -3625,7 +3626,7 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
     rows.forEach(row => {
       if (isSummaryLikeRow(row)) return;
       let month = '', amount = 0, name = '默认', idCard = '', phone = '', bankCard = '';
-      let socialBase = '', fundBase = '', socialInsuranceAmt = '', extraDeduction = '';
+      let socialBase = '', fundBase = '', fundRate = '', extraDeduction = '';
       let city = '';
       const monthHint = row._sheetMonthHint || '';
 
@@ -3645,7 +3646,7 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
       if (rowColMap.bankCard != null) bankCard = sanitizeBankCard(row[rowColMap.bankCard]);
       if (rowColMap.socialBase != null) socialBase = readAmt(rowColMap.socialBase);
       if (rowColMap.fundBase != null) fundBase = readAmt(rowColMap.fundBase);
-      if (rowColMap.socialInsurance != null) socialInsuranceAmt = readAmt(rowColMap.socialInsurance);
+      if (rowColMap.fundRate != null) fundRate = parseFundRate(row[rowColMap.fundRate]);
       if (rowColMap.extraDeduction != null) extraDeduction = readAmt(rowColMap.extraDeduction);
       if (rowColMap.city != null) city = String(row[rowColMap.city] == null ? '' : row[rowColMap.city]).trim();
       if ((!month || month === '-') && monthHint) month = monthHint;
@@ -3682,7 +3683,7 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
           amount,
           socialBase,
           fundBase,
-          socialInsuranceAmt,
+          fundRate,
           extraDeduction,
           city,
           person: name,
@@ -4114,7 +4115,7 @@ function showBatchPreview(parsed, personKeys, personsMap, filename) {
             </label>
           </div>
         </div>
-        <div style="font-size:12px;color:var(--text2);margin-bottom:16px;">三险一金按行内城市/整批城市政策计算：行内「三险一金」金额 > 行内基数（按城市上下限 clamp）> 全局基数${incomeType === 'salary' ? ' > 应发工资作基数（勾选后）' : ''}；均无则记 0 并标注。</div>`}
+        <div style="font-size:12px;color:var(--text2);margin-bottom:16px;">三险一金按行内城市/整批城市政策自动计算：行内基数（按城市上下限 clamp）> 全局基数${incomeType === 'salary' ? ' > 应发工资作基数（勾选后）' : ''}；公积金比例按 行内「公积金比例」列 > 「工资参数」档位；均无基数则记 0 并标注。</div>`}
         <button class="btn btn-primary" onclick="runBatchCalc()" style="width:100%;padding:12px;font-size:15px;">🚀 开始计算</button>
       </div>
     </div>
@@ -4190,32 +4191,28 @@ function runBatchCalc() {
         const cityUnknown = !!d.city && !rowCityKey;
         const cityKey = rowCityKey || batchCityId || salaryParams.cityId;
         const pol = resolvePolicyMemo(cityKey, d.month);
-        const cityFundRate = cityKey === 'custom'
-          ? salaryParams.fundRate
-          : (salaryParams.fundRate ?? ((pol.items.fund && pol.items.fund.personal) || 0));
+        /* 公积金比例：行内「公积金比例」列 > 「工资参数」全局档位 */
+        const effFundRate = (d.fundRate !== '' && d.fundRate != null) ? Number(d.fundRate) : salaryParams.fundRate;
 
-        /* 三险一金：行内金额 > 行内基数×城市政策 > 全局基数 > 按应发工资作基数（勾选时） > 0 并标注 */
+        /* 三险一金：行内基数×城市政策 > 全局基数 > 按应发工资作基数（勾选时） > 0 并标注 */
         let si;
         let siD = null;
-        const hasRowSIAmt = d.socialInsuranceAmt !== '' && d.socialInsuranceAmt != null;
         const hasRowBase = d.socialBase !== '' && d.socialBase != null && d.socialBase > 0;
-        if (hasRowSIAmt) {
-          si = d.socialInsuranceAmt;
-        } else if (hasRowBase) {
+        if (hasRowBase) {
           const fund = (d.fundBase !== '' && d.fundBase != null) ? d.fundBase : d.socialBase;
-          siD = computeSocialInsuranceDetail(d.socialBase, fund, pol.items, cityFundRate);
+          siD = computeSocialInsuranceDetail(d.socialBase, fund, pol.items, effFundRate);
           si = siD.total;
         } else if (salaryParams.socialBase > 0) {
-          siD = computeSocialInsuranceDetail(salaryParams.socialBase, salaryParams.fundBase, pol.items, cityFundRate);
+          siD = computeSocialInsuranceDetail(salaryParams.socialBase, salaryParams.fundBase, pol.items, effFundRate);
           si = siD.total;
         } else if (batchGrossAsBase) {
-          siD = computeSocialInsuranceDetail(d.amount, '', pol.items, cityFundRate);
+          siD = computeSocialInsuranceDetail(d.amount, '', pol.items, effFundRate);
           si = siD.total;
         } else {
           si = 0;
         }
         si = round2(Math.max(0, Number(si) || 0));
-        const siMissing = !hasRowSIAmt && !hasRowBase && !(salaryParams.socialBase > 0) && !batchGrossAsBase;
+        const siMissing = !hasRowBase && !(salaryParams.socialBase > 0) && !batchGrossAsBase;
 
         const extra = (d.extraDeduction !== '' && d.extraDeduction != null)
           ? Math.max(0, Number(d.extraDeduction) || 0)
@@ -4432,7 +4429,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
           : '';
 
         const siTitle = r._siDetail
-          ? ` title="养老 ¥${formatNum(r._siDetail.pension)} / 医疗 ¥${formatNum(r._siDetail.medical)} / 失业 ¥${formatNum(r._siDetail.unemployment)} / 公积金 ¥${formatNum(r._siDetail.fund)}"`
+          ? ` title="养老 ¥${formatNum(r._siDetail.pension)} / 医疗 ¥${formatNum(r._siDetail.medical)} / 失业 ¥${formatNum(r._siDetail.unemployment)} / 公积金 ${formatRate(r._siDetail.fundRateUsed)} ¥${formatNum(r._siDetail.fund)}"`
           : (r._siMissing ? ' title="行内与全局均未设置基数，三险一金按 0 计算"' : '');
 
         return gapMarker + oldPolicyMarker + cityWarnMarker + `
@@ -4565,7 +4562,7 @@ function exportBatchCSV() {
   if (hasPhone) headerCols += ',电话';
   if (hasBankCard) headerCols += ',银行卡号';
   if (isSalary) {
-    headerCols += `,月份,城市,政策年度,${preLabel},三险一金(个人),专项附加扣除,累计应发金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},计税方式`;
+    headerCols += `,月份,城市,政策年度,${preLabel},三险一金(个人),公积金比例,专项附加扣除,累计应发金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},计税方式`;
   } else {
     headerCols += `,月份,${preLabel},本次预扣收入额,累计发放金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},政策类型`;
   }
@@ -4578,7 +4575,7 @@ function exportBatchCSV() {
     const inAmt = round2(batchDirection === 'forward' ? r.preTax : r.postTax);
     const outAmt = round2(batchDirection === 'forward' ? r.postTax : r.preTax);
     if (isSalary) {
-      cols += `,"${r.month}","${r.cityName || ''}","${r.policyYearLabel || ''}",${inAmt},${round2(r.socialInsurance || 0)},${round2(r.extraDeduction || 0)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${outAmt},累计预扣${r._siMissing ? '(三险一金未设置)' : ''}${r._cityUnknown ? '(城市未识别)' : ''}${r._yearFallback ? '(年度未匹配)' : ''}`;
+      cols += `,"${r.month}","${r.cityName || ''}","${r.policyYearLabel || ''}",${inAmt},${round2(r.socialInsurance || 0)},${r._siDetail ? formatRate(r._siDetail.fundRateUsed) : ''},${round2(r.extraDeduction || 0)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${outAmt},累计预扣${r._siMissing ? '(三险一金未设置)' : ''}${r._cityUnknown ? '(城市未识别)' : ''}${r._yearFallback ? '(年度未匹配)' : ''}`;
     } else {
       cols += `,"${r.month}",${inAmt},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${outAmt},${r._isOldPolicy ? '旧政策' : '新政策'}`;
     }
@@ -4590,7 +4587,7 @@ function exportBatchCSV() {
 
 function downloadTemplate() {
   if (incomeType === 'salary') {
-    const csv = '姓名,身份证号,月份,应发工资,城市,社保基数,公积金基数,三险一金,专项附加扣除\n张三,110101199001011234,2026-01,10000,广州,10000,10000,,1000\n张三,110101199001011234,2026-02,10000,广州,10000,10000,,1000\n李四,110101199202022345,2026-01,8000,深圳,,,,-\n王五,110101199303033456,2026-01,9000,,,,,800';
+    const csv = '姓名,身份证号,月份,应发工资,城市,社保基数,公积金基数,公积金比例,专项附加扣除\n张三,110101199001011234,2026-01,10000,广州,10000,10000,5,1000\n张三,110101199001011234,2026-02,10000,广州,10000,10000,5,1000\n李四,110101199202022345,2026-01,8000,深圳,8000,,12,\n王五,110101199303033456,2026-01,9000,,,,,800';
     downloadFile(csv, '工资薪金个税计算模板.csv', 'text/csv');
   } else {
     const csv = '月份,金额,姓名,身份证号,电话,银行卡号\n2024年11月,15000,张三,110101199001011234,13800138000,6225880112345678\n2024/12,20000,张三,110101199001011234,13800138000,6225880112345678\n2025-01,18000,张三,110101199001011234,13800138000,6225880112345678\n2025-02,22000,张三,110101199001011234,13800138000,6225880112345678\n2024.11,8000,李四,,,6225880198765432\n2024.12,12000,李四,,,6225880198765432\n2025-01,9500,李四,,,6225880198765432';
@@ -4608,12 +4605,29 @@ function parseAmount(str) {
   return parseFloat(String(str).replace(/,/g, '')) || 0;
 }
 
+/**
+ * 解析公积金比例列为小数比例：5 → 0.05、12 → 0.12、0.05 → 0.05、"5%" → 0.05。
+ * 空/非数字/负数/>100 返回 ''（视为未填，回退全局比例；≤1 视为小数写法，>1 视为百分数）
+ */
+function parseFundRate(raw) {
+  const s = String(raw == null ? '' : raw).trim().replace(/%|％$/, '').trim();
+  if (!s) return '';
+  const v = parseFloat(s);
+  if (!isFinite(v) || v < 0 || v > 100) return '';
+  return v <= 1 ? v : v / 100;
+}
+
 function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
 function formatNum(n) {
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** 比例展示：0.12 → "12%"、0.05 → "5%" */
+function formatRate(rate) {
+  return (rate * 100).toFixed(1).replace(/\.0$/, '') + '%';
 }
 
 /* 文件导出：多层回退兼容不同浏览器和协议（file:// / https://） */
@@ -4772,6 +4786,34 @@ function runSelfTests() {
   const gz8000 = computeSocialInsuranceDetail(8000, '', gz.items, 0.05);
   const sz8000 = computeSocialInsuranceDetail(8000, '', sz.items, 0.05);
   isTrue('广州深圳同薪三险一金不同', gz8000.total !== sz8000.total);
+
+  // —— 批量「公积金比例」列：多写法解析与行内择档 ——
+  eq('parseFundRate 5→0.05', parseFundRate('5'), 0.05);
+  eq('parseFundRate 12→0.12', parseFundRate('12'), 0.12);
+  eq('parseFundRate 0.05→0.05', parseFundRate('0.05'), 0.05);
+  eq('parseFundRate "5%"→0.05', parseFundRate('5%'), 0.05);
+  isTrue('parseFundRate 空串→空（回退全局）', parseFundRate('') === '');
+  isTrue('parseFundRate 120→空（非法）', parseFundRate('120') === '');
+  isTrue('parseFundRate 负数→空（非法）', parseFundRate('-3') === '');
+  isTrue('行内公积金比例生效：12%≠5% 缴存额', (() => {
+    const d12 = computeSocialInsuranceDetail(10000, '', customItems, 0.12);
+    const d05 = computeSocialInsuranceDetail(10000, '', customItems, 0.05);
+    return d12.fund !== d05.fund && d12.fundRateUsed === 0.12 && d05.fundRateUsed === 0.05;
+  })());
+  isTrue('列识别：「公积金比例」→fundRate（不与基数列冲突）', (() => {
+    const m = detectColumnMapping(['姓名', '应发工资', '公积金比例', '社保基数'], [['张三', 10000, 5, 10000]]);
+    return m.cols[2].type === 'fundRate' && m.cols[3].type === 'socialBase';
+  })());
+  isTrue('列识别：「三险一金」表头不再映射任何类型', (() => {
+    const m = detectColumnMapping(['姓名', '应发工资', '三险一金'], [['张三', 10000, 2250]]);
+    return m.cols[2].type === '';
+  })());
+  isTrue('列识别：模板表头结构（公积金比例列 + 专项附加列）', (() => {
+    const m = detectColumnMapping(
+      ['姓名', '身份证号', '月份', '应发工资', '城市', '社保基数', '公积金基数', '公积金比例', '专项附加扣除'],
+      [['张三', '110101199001011234', '2026-01', 10000, '广州', 10000, 10000, 5, 1000]]);
+    return m.cols[7].type === 'fundRate' && m.cols[8].type === 'extraDeduction';
+  })());
 
   // —— 政策库 JSON roundtrip ——
   const snapshot = JSON.stringify(CITY_POLICY_LIBRARY);

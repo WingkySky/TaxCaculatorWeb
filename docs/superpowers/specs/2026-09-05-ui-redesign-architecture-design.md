@@ -1,7 +1,7 @@
 # UI 重设计与架构解耦 · 设计规格（Ant 企业蓝 / 侧边栏控制台 / 亮暗双主题 / 纯静态多文件）
 
 日期：2026-09-05
-状态：设计已获用户认可，待实施
+状态：已实现（`index.html` + `css/` + `js/`）。验收：94 项自检通过；file:// 双击与静态服务器双形态实测可用；亮/暗主题、375/768/1440 三档宽度、批量真实链路（processWithMapping → runBatchCalc）逐一验证通过。实施偏差：共享状态独立为 `state.js`（规格原列在 app.js）；`extraDetailDefaults` 归入 `state.js`（供 salaryParams 初始化引用）；CSV 导出函数保留在各页面模块（规格原列在 Exporter），`Exporter` 保留 ensureXLSX/模板/公式导出机械；`EXTRA_ITEM_STANDARDS` 随计算逻辑归入 `social-insurance.js`。
 
 ## 背景与问题
 

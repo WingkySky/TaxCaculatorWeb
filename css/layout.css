@@ -1,0 +1,171 @@
+/* ============================================================
+   layout.css — 侧边栏控制台骨架
+   .app-shell > (.sidebar + .main-area(.topbar + .page-container))
+   ≤768px：侧栏转抽屉（.drawer-open + .drawer-mask）
+   ============================================================ */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  align-items: stretch;
+}
+
+/* ---------- 侧边栏 ---------- */
+.sidebar {
+  width: var(--t-sidebar-w);
+  flex-shrink: 0;
+  background: var(--t-bg-container);
+  border-right: 1px solid var(--t-split);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.2s ease, background-color 0.25s;
+  z-index: 1100;
+}
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--t-split);
+  flex-shrink: 0;
+}
+.sidebar-brand .brand-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--t-radius);
+  background: linear-gradient(135deg, var(--t-primary), var(--t-primary-hover));
+  color: var(--t-text-inverse);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.sidebar-brand .brand-name { font-size: 15px; font-weight: 600; white-space: nowrap; }
+.sidebar-brand .brand-name small { display: block; font-size: 10px; color: var(--t-text-3); font-weight: 400; line-height: 1.3; }
+
+.sidebar-menu { flex: 1; padding: 10px 8px; overflow-y: auto; }
+.menu-group { font-size: 11px; color: var(--t-text-3); padding: 12px 10px 4px; letter-spacing: 1px; }
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin: 2px 0;
+  border-radius: var(--t-radius);
+  font-size: 14px;
+  color: var(--t-text-2);
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  font-family: inherit;
+  text-align: left;
+  transition: color 0.2s, background-color 0.2s;
+  white-space: nowrap;
+}
+.menu-item:hover { color: var(--t-text); background: var(--t-bg-hover); }
+.menu-item.active { background: var(--t-primary-bg); color: var(--t-primary); font-weight: 600; }
+.menu-item .icon { flex-shrink: 0; }
+.menu-item .icon svg { width: 17px; height: 17px; }
+
+/* 折叠态：只留图标 */
+.sidebar.collapsed { width: var(--t-sidebar-collapsed-w); }
+.sidebar.collapsed .brand-name,
+.sidebar.collapsed .menu-label,
+.sidebar.collapsed .menu-group { display: none; }
+.sidebar.collapsed .sidebar-brand { justify-content: center; padding: 14px 8px; }
+.sidebar.collapsed .menu-item { justify-content: center; padding: 9px 0; }
+
+/* 折叠按钮（桌面端） */
+.collapse-btn {
+  margin: 8px;
+  flex-shrink: 0;
+  color: var(--t-text-3);
+}
+.collapse-btn svg { width: 16px; height: 16px; }
+.collapse-btn:hover { color: var(--t-text); }
+
+/* ---------- 主区 ---------- */
+.main-area { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+.topbar {
+  height: var(--t-topbar-h);
+  background: var(--t-bg-container);
+  border-bottom: 1px solid var(--t-split);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  position: sticky;
+  top: 0;
+  z-index: 900;
+  transition: background-color 0.25s;
+}
+.topbar .spacer { flex: 1; }
+.topbar .icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--t-radius);
+  border: none;
+  background: none;
+  color: var(--t-text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.2s, background-color 0.2s;
+  flex-shrink: 0;
+}
+.topbar .icon-btn:hover { color: var(--t-text); background: var(--t-bg-hover); }
+.topbar .icon-btn svg { width: 18px; height: 18px; }
+
+.topbar-income .seg-btn { padding: 4px 14px; font-size: 13px; }
+
+.page-container { flex: 1; padding: 20px 24px 40px; }
+
+.page { display: none; }
+.page.active { display: block; }
+
+/* 页头（标题 + 说明 + 动作） */
+.page-header { margin-bottom: 20px; }
+.page-header h2 { font-size: 20px; margin-bottom: 4px; }
+.page-header .page-desc { font-size: 13px; color: var(--t-text-2); }
+
+/* ---------- 移动端抽屉 ---------- */
+.drawer-mask {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1050;
+}
+.topbar .hamburger-btn { display: none; }
+
+@media (max-width: 768px) {
+  .page-container { padding: 14px 12px 32px; }
+  .collapse-btn { display: none; }
+  .topbar .hamburger-btn { display: inline-flex; }
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    transform: translateX(-100%);
+    width: var(--t-sidebar-w) !important;
+    box-shadow: var(--t-shadow-lg);
+  }
+  .sidebar.drawer-open { transform: translateX(0); }
+  .sidebar.drawer-open .brand-name,
+  .sidebar.drawer-open .menu-label,
+  .sidebar.drawer-open .menu-group { display: block; }
+  .sidebar.drawer-open .menu-item { justify-content: flex-start; padding: 8px 10px; }
+  .drawer-mask.show { display: block; }
+  .topbar { padding: 0 12px; }
+  .topbar-income { margin-left: auto; }
+  .income-sub { display: none; }
+}

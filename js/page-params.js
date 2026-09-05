@@ -1,0 +1,243 @@
+/* ============================================================
+ * page-params.js — PageParams 工资参数页
+ * 职责：城市/年度/公积金比例联动、参数读取、政策明细预览表、专项附加分项面板。
+ * 对外接口：window.PageParams。依赖：PolicyLib/SocialIns/UI/TaxState/TaxUtils。
+ * ============================================================ */
+(function () {
+'use strict';
+  const round2 = (...a) => TaxUtils.round2(...a);
+  const CITY_POLICY_LIBRARY = PolicyLib.CITY_POLICY_LIBRARY;
+  const EXTRA_ITEM_STANDARDS = SocialIns.EXTRA_ITEM_STANDARDS;
+  const isPolicyDataFileMissing = (...a) => PolicyLib.isPolicyDataFileMissing(...a);
+  const computeSocialInsuranceDetail = (...a) => SocialIns.computeSocialInsuranceDetail(...a);
+  const computeExtraDetailFor = (...a) => SocialIns.computeExtraDetailFor(...a);
+  const resolvePolicy = (...a) => PolicyLib.resolvePolicy(...a);
+  const formatNum = (...a) => TaxUtils.formatNum(...a);
+  const FUND_RATES_STD = PolicyLib.FUND_RATES_STD;
+  const suggestHouseRentTier = (...a) => SocialIns.suggestHouseRentTier(...a);
+  const SI_ITEMS = PolicyLib.SI_ITEMS;
+
+function onExtraDetailToggle() {
+  const cb = document.getElementById('sp-extra-detail-on');
+  salaryParams.extraDetail.on = !!(cb && cb.checked);
+  const wrap = document.getElementById('sp-extra-detail-wrap');
+  if (wrap) wrap.style.display = salaryParams.extraDetail.on ? '' : 'none';
+  const single = document.getElementById('sp-extra-deduction');
+  if (single) single.disabled = salaryParams.extraDetail.on;
+  renderExtraDetailPanel();
+}
+
+function onExtraItemToggle(key, checked) {
+  salaryParams.extraDetail[key].on = !!checked;
+  // 互斥：住房贷款利息与住房租金不得同时扣除，勾选其一自动取消另一个
+  if (checked && key === 'houseLoan' && salaryParams.extraDetail.houseRent.on) {
+    salaryParams.extraDetail.houseRent.on = false;
+  }
+  if (checked && key === 'houseRent' && salaryParams.extraDetail.houseLoan.on) {
+    salaryParams.extraDetail.houseLoan.on = false;
+  }
+  renderExtraDetailPanel();
+}
+
+function onExtraItemInput(key, field, value) {
+  const d = salaryParams.extraDetail[key];
+  if (!d) return;
+  if (field === 'count') d.count = Math.max(0, Math.floor(Number(value) || 0));
+  else if (field === 'tier') { d.tier = Number(value) || 1500; d.tierUntouched = true; }
+  else if (field === 'share') d.share = Math.max(0, Number(value) || 0);
+  else if (field === 'annual') d.annual = Math.max(0, Number(value) || 0);
+  else if (field === 'kind') d.kind = value === 'cert' ? 'cert' : 'degree';
+  else if (field === 'certMonth') d.certMonth = /^\d{4}-\d{2}$/.test(String(value).trim()) ? String(value).trim() : '';
+  renderExtraDetailPanel();
+}
+
+/** 渲染分项明细行 + 政策校验提示 + 月度合计 */
+function renderExtraDetailPanel() {
+  const wrap = document.getElementById('sp-extra-detail-wrap');
+  if (!wrap) return;
+  const d = salaryParams.extraDetail;
+  const inp = (key, field, value, min, step, width) =>
+    `<input type="number" min="${min}" step="${step}" value="${value == null ? '' : value}"
+      oninput="PageParams.onExtraItemInput('${key}','${field}',this.value)"
+      style="width:${width || 80}px;background:var(--t-bg-header);border:1px solid var(--t-border);border-radius:6px;padding:4px 8px;color:var(--t-text);font-size:12px;outline:none;">`;
+  const sel = (key, field, options, value) =>
+    `<select onchange="PageParams.onExtraItemInput('${key}','${field}',this.value)"
+      style="background:var(--t-bg-header);border:1px solid var(--t-border);border-radius:6px;padding:4px 8px;color:var(--t-text);font-size:12px;outline:none;">
+      ${options.map(o => `<option value="${o[0]}" ${String(o[0]) === String(value) ? 'selected' : ''}>${o[1]}</option>`).join('')}
+    </select>`;
+  const row = (key, label, controls, note) => `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--t-border);">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t-text);min-width:150px;cursor:pointer;">
+        <input type="checkbox" ${d[key].on ? 'checked' : ''} onchange="PageParams.onExtraItemToggle('${key}',this.checked)"> ${label}
+      </label>
+      <span style="font-size:11px;color:var(--t-text-2);min-width:170px;">${EXTRA_ITEM_STANDARDS[key]}</span>
+      <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t-text-2);flex:1;min-width:220px;">${controls || ''}
+        ${note ? `<span style="font-size:11px;color:var(--t-text-2);">${note}</span>` : ''}</span>
+    </div>`;
+  const monthInp = (key, field, value) =>
+    `<input type="month" value="${value || ''}" onchange="PageParams.onExtraItemInput('${key}','${field}',this.value)"
+      style="background:var(--t-bg-header);border:1px solid var(--t-border);border-radius:6px;padding:4px 8px;color:var(--t-text);font-size:12px;outline:none;">`;
+
+  wrap.innerHTML = `
+    ${row('childEducation', ' 子女教育', `每孩 ${inp('childEducation', 'count', d.childEducation.count, 0, 1)}`)}
+    ${row('infantCare', ' 3岁以下婴幼儿照护', `每孩 ${inp('infantCare', 'count', d.infantCare.count, 0, 1)}`)}
+    ${row('education', ' 继续教育',
+      sel('education', 'kind', [['degree', '学历（学位）继续教育'], ['cert', '职业资格继续教育']], d.education.kind) +
+      (d.education.kind === 'cert' ? ` 取得月份 ${monthInp('education', 'certMonth', d.education.certMonth)}` : ''))}
+    ${row('houseLoan', ' 住房贷款利息', '首套房贷，与住房租金互斥（勾选自动取消房租）')}
+    ${row('houseRent', '住房租金',
+      sel('houseRent', 'tier', [[1500, '1500（直辖市/省会/计划单列市）'], [1100, '1100（市辖区户籍人口＞100万）'], [800, '800（≤100万）']], d.houseRent.tier),
+      '切换参保城市会自动推荐档位')}
+    ${row('support', ' 赡养老人',
+      sel('support', 'mode', [['solo', '独生子女'], ['share', '非独生分摊']], d.support.mode) +
+      (d.support.mode === 'share' ? ` 本人均摊 ${inp('support', 'share', d.support.share, 0, 0.01)} 元/月` : ''))}
+    ${row('medical', ' 大病医疗', `年度自付 ${inp('medical', 'annual', d.medical.annual, 0, 0.01, 110)} 元`, '不参与每月预扣，年度汇算清缴时申报')}
+    <div id="sp-extra-messages" style="padding-top:6px;"></div>
+  `;
+  updateExtraDetailHint();
+}
+
+/** 月度合计徽标 + 校验消息 */
+function updateExtraDetailHint() {
+  const hint = document.getElementById('sp-extra-total-hint');
+  const msgEl = document.getElementById('sp-extra-messages');
+  const r = computeExtraDetailFor(salaryParams.extraDetail, '');
+  if (hint) {
+    hint.textContent = salaryParams.extraDetail.on
+      ? `月度合计（除职业资格取证月）¥${formatNum(r.total)}`
+      : '';
+  }
+  if (msgEl) {
+    msgEl.innerHTML = r.messages.map(m =>
+      `<div style="font-size:11px;color:var(--t-warning);padding:2px 0;"> ${m}</div>`).join('');
+  }
+}
+
+
+/** 城市下拉选项 HTML（含自定义；skipCustom 用于批量行内城市场景） */
+function buildCityOptions(selectedValue, skipCustom) {
+  return Object.entries(CITY_POLICY_LIBRARY)
+    .filter(([key]) => !(skipCustom && key === 'custom'))
+    .map(([key, city]) => `<option value="${key}" ${key === selectedValue ? 'selected' : ''}>${city.name}</option>`)
+    .join('');
+}
+
+/** 城市切换：重建年度/公积金比例选项后再读取参数 */
+function onCityParamChange() {
+  const cityId = document.getElementById('sp-city')?.value || 'custom';
+  const city = CITY_POLICY_LIBRARY[cityId] || CITY_POLICY_LIBRARY.custom;
+  const yearSel = document.getElementById('sp-year');
+  if (yearSel) {
+    yearSel.innerHTML = `<option value="auto" ${salaryParams.policyYear === 'auto' ? 'selected' : ''}>自动匹配</option>` +
+      Object.keys(city.years).map(yk =>
+        `<option value="${yk}" ${yk === salaryParams.policyYear ? 'selected' : ''}>${city.years[yk].label || yk}</option>`).join('');
+  }
+  const frSel = document.getElementById('sp-fund-rate');
+  const frCustomWrap = document.getElementById('sp-fund-rate-custom-wrap');
+  const rates = (city.years[Object.keys(city.years)[0]]?.items?.fund?.rates) || FUND_RATES_STD;
+  if (frSel && frCustomWrap) {
+    if (cityId === 'custom') {
+      frSel.style.display = 'none';
+      frCustomWrap.style.display = '';
+    } else {
+      frSel.style.display = '';
+      frCustomWrap.style.display = 'none';
+      frSel.innerHTML = rates.map(r =>
+        `<option value="${r}" ${Number(r) === Number(salaryParams.fundRate) ? 'selected' : ''}>${(r * 100).toFixed(1).replace(/\.0$/, '')}%</option>`).join('');
+      // 当前比例不在该城市可选档内时重置为最低档
+      if (!rates.some(r => Number(r) === Number(salaryParams.fundRate))) {
+        frSel.value = String(rates[0]);
+      }
+    }
+  }
+  // 住房租金档位按城市自动推荐（用户手动改过档位后不再覆盖）
+  if (!salaryParams.extraDetail.houseRent.tierUntouched) {
+    salaryParams.extraDetail.houseRent.tier = suggestHouseRentTier(cityId);
+  }
+  readSalaryParams();
+}
+
+/** 渲染参数卡中的险种政策明细表（只读；预览月份默认当前月，可切换） */
+function renderSalaryItemsTable() {
+  const el = document.getElementById('sp-items-table');
+  if (!el) return;
+  const missingEl = document.getElementById('sp-data-missing');
+  if (missingEl) missingEl.style.display = isPolicyDataFileMissing() ? '' : 'none';
+  const now = new Date();
+  const nowYM = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const prevInput = document.getElementById('sp-preview-month');
+  if (prevInput && !prevInput.value) prevInput.value = nowYM;
+  const previewYM = (prevInput && /^\d{4}-\d{2}$/.test(prevInput.value)) ? prevInput.value : nowYM;
+  const pol = resolvePolicy(salaryParams.cityId, previewYM);
+  const det = computeSocialInsuranceDetail(salaryParams.socialBase, salaryParams.fundBase, pol.items, salaryParams.fundRate);
+  const fmtBound = (v) => (v == null ? '不限' : formatNum(v));
+  const fmtRate = (r) => (r == null ? '同个人档' : ((r * 100).toFixed(1).replace(/\.0$/, '') + '%'));
+  el.innerHTML = `
+    <thead>
+      <tr>
+        <th colspan="7" style="text-align:left;color:var(--t-text-2);font-weight:500;">适用政策（按预览月份 ${previewYM} 匹配）：${pol.label}${pol.matched ? '' : '（未精确匹配月份，已用最新年度）'}${pol.items && CITY_POLICY_LIBRARY[pol.cityKey].years[pol.yearKey].pending ? ' · 参考值待核对' : ''}</th>
+      </tr>
+      <tr><th>险种</th><th>个人比例</th><th>单位比例</th><th>基数下限</th><th>基数上限</th><th>个人实缴</th><th>单位实缴</th></tr>
+    </thead>
+    <tbody>
+      ${SI_ITEMS.map(it => {
+        const item = pol.items[it.key];
+        if (!item) return '';
+        const rate = it.key === 'fund' ? (salaryParams.fundRate ?? item.personal) : item.personal;
+        const erRate = it.key === 'fund' ? (item.employer != null ? item.employer : null) : item.employer;
+        return `<tr>
+          <td>${it.label}</td>
+          <td>${(rate * 100).toFixed(1).replace(/\.0$/, '')}%</td>
+          <td>${fmtRate(erRate)}</td>
+          <td>${fmtBound(item.lower)}</td>
+          <td>${fmtBound(item.upper)}</td>
+          <td style="color:var(--t-primary);">¥${formatNum(det[it.key] || 0)}</td>
+          <td style="color:var(--t-text-2);">¥${formatNum(det.employer[it.key] || 0)}</td>
+        </tr>`;
+      }).join('')}
+      <tr class="total-row"><td colspan="5">三险一金合计（个人/月）</td><td style="color:var(--t-primary);">¥${formatNum(det.total)}</td><td></td></tr>
+      <tr class="total-row"><td colspan="5">单位缴纳合计（企业/月）</td><td></td><td style="color:var(--t-text-2);">¥${formatNum(det.employer.total)}</td></tr>
+      ${salaryParams.socialBase > 0 ? `<tr class="total-row"><td colspan="5">企业用工总成本（月薪 ${formatNum(salaryParams.socialBase)} 口径）</td><td colspan="2" style="color:var(--t-warning);">¥${formatNum(round2(salaryParams.socialBase + det.employer.total))}</td></tr>` : ''}
+    </tbody>`;
+}
+
+/**
+ * 从「工资参数」读取输入到 salaryParams；非法输入标红并保留上一次合法值
+ * @returns {boolean} 是否全部合法
+ */
+function readSalaryParams() {
+  let ok = true;
+  const readNum = (id, min, max) => {
+    const el = document.getElementById(id);
+    if (!el) return '';
+    const raw = String(el.value).trim();
+    if (raw === '') { el.classList.remove('input-error'); return ''; }
+    const v = parseFloat(raw);
+    if (!isFinite(v) || v < min || v > max) { el.classList.add('input-error'); ok = false; return ''; }
+    el.classList.remove('input-error');
+    return v;
+  };
+  const citySel = document.getElementById('sp-city');
+  if (citySel && CITY_POLICY_LIBRARY[citySel.value]) salaryParams.cityId = citySel.value;
+  const yearSel = document.getElementById('sp-year');
+  if (yearSel) salaryParams.policyYear = yearSel.value || 'auto';
+  const frSel = document.getElementById('sp-fund-rate');
+  const frCustom = document.getElementById('sp-fund-rate-custom');
+  if (salaryParams.cityId === 'custom') {
+    const v = frCustom ? readNum('sp-fund-rate-custom', 0, 100) : '';
+    if (v !== '') salaryParams.fundRate = v / 100;
+  } else if (frSel && frSel.value !== '') {
+    salaryParams.fundRate = Number(frSel.value);
+  }
+  const base = readNum('sp-social-base', 0, Infinity);
+  if (base !== '') salaryParams.socialBase = base;
+  salaryParams.fundBase = readNum('sp-fund-base', 0, Infinity);
+  const extra = readNum('sp-extra-deduction', 0, Infinity);
+  if (extra !== '') salaryParams.extraDeduction = extra;
+  renderSalaryItemsTable();
+  return ok;
+}
+
+
+  window.PageParams = { buildCityOptions,onCityParamChange,onExtraDetailToggle,onExtraItemInput,onExtraItemToggle,readSalaryParams,renderExtraDetailPanel,renderSalaryItemsTable,updateExtraDetailHint };
+})();

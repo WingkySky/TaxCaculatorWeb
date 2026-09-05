@@ -1,0 +1,97 @@
+/* ============================================================
+   tokens.css — 设计令牌（Ant Design 企业蓝 · 亮暗双主题）
+   主题切换：<html class="theme-dark"> 挂载暗色变量组。
+   所有组件禁止硬编码颜色，一律引用本文件的变量。
+   ============================================================ */
+
+:root {
+  /* 主色 */
+  --t-primary: #1677ff;
+  --t-primary-hover: #4096ff;
+  --t-primary-active: #0958d9;
+  --t-primary-bg: #e6f4ff;
+  --t-primary-border: #91caff;
+
+  /* 语义色 */
+  --t-success: #52c41a;
+  --t-success-bg: #f6ffed;
+  --t-success-border: #b7eb8f;
+  --t-warning: #faad14;
+  --t-warning-bg: #fffbe6;
+  --t-warning-border: #ffe58f;
+  --t-error: #ff4d4f;
+  --t-error-bg: #fff2f0;
+  --t-error-border: #ffccc7;
+
+  /* 中性面层 */
+  --t-bg-layout: #f5f7fa;
+  --t-bg-container: #ffffff;
+  --t-bg-elevated: #ffffff;
+  --t-bg-hover: rgba(0, 0, 0, 0.04);
+  --t-bg-header: #fafafa;
+  --t-bg-input: #ffffff;
+
+  /* 文字三级 */
+  --t-text: rgba(0, 0, 0, 0.88);
+  --t-text-2: rgba(0, 0, 0, 0.65);
+  --t-text-3: rgba(0, 0, 0, 0.45);
+  --t-text-inverse: #ffffff;
+
+  /* 线与分割 */
+  --t-border: #d9d9d9;
+  --t-border-hover: #1677ff;
+  --t-split: #f0f0f0;
+  --t-shadow-divider: 1px 0 0 var(--t-split);
+
+  /* 阴影 */
+  --t-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 4px rgba(0, 0, 0, 0.03);
+  --t-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05);
+  --t-shadow-lg: 0 6px 16px rgba(0, 0, 0, 0.10), 0 3px 6px -4px rgba(0, 0, 0, 0.10);
+
+  /* 几何 */
+  --t-radius-lg: 8px;
+  --t-radius: 6px;
+  --t-radius-sm: 4px;
+  --t-sidebar-w: 208px;
+  --t-sidebar-collapsed-w: 56px;
+  --t-topbar-h: 56px;
+}
+
+html.theme-dark {
+  --t-primary: #1668dc;
+  --t-primary-hover: #3c89e8;
+  --t-primary-active: #0c4a8c;
+  --t-primary-bg: rgba(22, 104, 220, 0.18);
+  --t-primary-border: #15395a;
+
+  --t-success: #49aa19;
+  --t-success-bg: rgba(82, 196, 26, 0.12);
+  --t-success-border: rgba(82, 196, 26, 0.35);
+  --t-warning: #d89614;
+  --t-warning-bg: rgba(250, 173, 20, 0.12);
+  --t-warning-border: rgba(250, 173, 20, 0.35);
+  --t-error: #dc4446;
+  --t-error-bg: rgba(255, 77, 79, 0.12);
+  --t-error-border: rgba(255, 77, 79, 0.35);
+
+  --t-bg-layout: #0f0f0f;
+  --t-bg-container: #1f1f1f;
+  --t-bg-elevated: #262626;
+  --t-bg-hover: rgba(255, 255, 255, 0.06);
+  --t-bg-header: #232323;
+  --t-bg-input: #1f1f1f;
+
+  --t-text: rgba(255, 255, 255, 0.85);
+  --t-text-2: rgba(255, 255, 255, 0.65);
+  --t-text-3: rgba(255, 255, 255, 0.45);
+  --t-text-inverse: #ffffff;
+
+  --t-border: #303030;
+  --t-border-hover: #1668dc;
+  --t-split: #333333;
+  --t-shadow-divider: 1px 0 0 var(--t-split);
+
+  --t-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --t-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --t-shadow-lg: 0 6px 16px rgba(0, 0, 0, 0.55), 0 3px 6px -4px rgba(0, 0, 0, 0.45);
+}

@@ -9,14 +9,18 @@
  *   2. 页面「政策数据管理」弹层中编辑，并可导出 Excel / JSON；
  *   3. 用 Excel 按导出的表头格式维护后导入覆盖。
  *
- * 结构：城市key → 年度key → 险种（养老/医疗/失业/公积金）
- *   每个险种：{ personal 个人比例(小数), lower 基数下限, upper 基数上限 }
- *   公积金额外：rates 可选比例档（小数数组）；缺省上下限填 null 表示不限。
+ * 结构：城市key → 年度key → 险种（养老/医疗(含生育)/失业/工伤/公积金）
+ *   每个险种：{ personal 个人比例(小数), lower 基数下限, upper 基数上限,
+ *              employer 单位比例(小数；可选，缺省 0，工伤用) }
+ *   公积金额外：rates 可选比例档（小数数组）；fund.employer 可选——
+ *              缺省表示「单位与个人同档」（多数城市要求同比例缴存）。
  *   年度记录：label 说明、effective 生效月区间 [起, 止]（YYYY-MM 闭区间）、
  *            pending: true 表示数值待核对（编辑后请移除该标记）。
  *
  * 数据说明（更新于 2026-09-04）：
  *   · 北京/上海/广州/深圳/杭州/江苏/重庆等 2026 年度数据按公开报道整理；
+ *   · 单位比例（含工伤）按公开资料整理，均为参考值待核对，工伤比例
+ *     按行业基准费率 0.2% 填写（实际 0.2%~1.9% 由行业浮动），请自行核对；
  *   · 广东最低工资自 2026-09-01 调整（粤府函〔2026〕188号：广州 2680、深圳 2700），
  *     广州公积金下限同步调为 2680；深圳失业保险下限（按最低工资）调为 2700/48471，
  *     深圳公积金下限 2700 同步生效；
@@ -36,9 +40,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2025-07', '2026-06'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 6821, upper: 35283 },
-          medical:      { personal: 0.02,  lower: 6821, upper: 35283 },
-          unemployment: { personal: 0.005, lower: 6821, upper: 35283 },
+          pension:      { personal: 0.08,  lower: 6821, upper: 35283, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 6821, upper: 35283, employer: 0.098 },
+          unemployment: { personal: 0.005, lower: 6821, upper: 35283, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.12, rates: [0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 0.12], lower: 2420, upper: 35283 }
         }
       },
@@ -47,9 +52,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2026-07', '2027-06'],
         pending: false,
         items: {
-          pension:      { personal: 0.08,  lower: 7270, upper: 36348 },
-          medical:      { personal: 0.02,  lower: 7270, upper: 36348 },
-          unemployment: { personal: 0.005, lower: 7270, upper: 36348 },
+          pension:      { personal: 0.08,  lower: 7270, upper: 36348, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 7270, upper: 36348, employer: 0.098 },
+          unemployment: { personal: 0.005, lower: 7270, upper: 36348, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.12, rates: [0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 0.12], lower: 2420, upper: 36348 }
         }
       }
@@ -63,9 +69,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2025-07', '2026-06'],
         pending: false,
         items: {
-          pension:      { personal: 0.08,  lower: 7460, upper: 37302 },
-          medical:      { personal: 0.02,  lower: 7460, upper: 37302 },
-          unemployment: { personal: 0.005, lower: 7460, upper: 37302 },
+          pension:      { personal: 0.08,  lower: 7460, upper: 37302, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 7460, upper: 37302, employer: 0.10 },
+          unemployment: { personal: 0.005, lower: 7460, upper: 37302, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.07, rates: [0.05, 0.06, 0.07, 0.08, 0.10, 0.12], lower: 2740, upper: 37302 }
         }
       },
@@ -74,9 +81,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2026-07', '2027-06'],
         pending: false,
         items: {
-          pension:      { personal: 0.08,  lower: 7546, upper: 37731 },
-          medical:      { personal: 0.02,  lower: 7546, upper: 37731 },
-          unemployment: { personal: 0.005, lower: 7546, upper: 37731 },
+          pension:      { personal: 0.08,  lower: 7546, upper: 37731, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 7546, upper: 37731, employer: 0.10 },
+          unemployment: { personal: 0.005, lower: 7546, upper: 37731, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.07, rates: [0.05, 0.06, 0.07, 0.08, 0.10, 0.12], lower: 2740, upper: 37302 }
         }
       }
@@ -90,9 +98,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2023-07', '2024-06'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4546, upper: 26421 },
-          medical:      { personal: 0.02,  lower: 7175, upper: 35875 },
-          unemployment: { personal: 0.002, lower: 2300, upper: 39579 },
+          pension:      { personal: 0.08,  lower: 4546, upper: 26421, employer: 0.15 },
+          medical:      { personal: 0.02,  lower: 7175, upper: 35875, employer: 0.065 },
+          unemployment: { personal: 0.002, lower: 2300, upper: 39579, employer: 0.008 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2300, upper: 38082 }
         }
       },
@@ -101,9 +110,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2024-07', '2025-06'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 5500, upper: 27501 },
-          medical:      { personal: 0.02,  lower: 6236, upper: 31179 },
-          unemployment: { personal: 0.002, lower: 2300, upper: 39579 },
+          pension:      { personal: 0.08,  lower: 5500, upper: 27501, employer: 0.15 },
+          medical:      { personal: 0.02,  lower: 6236, upper: 31179, employer: 0.065 },
+          unemployment: { personal: 0.002, lower: 2300, upper: 39579, employer: 0.008 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2300, upper: 38082 }
         }
       },
@@ -112,9 +122,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2025-07', '2026-06'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 5510, upper: 27549 },
-          medical:      { personal: 0.02,  lower: 6236, upper: 31179 },
-          unemployment: { personal: 0.002, lower: 2500, upper: 41112 },
+          pension:      { personal: 0.08,  lower: 5510, upper: 27549, employer: 0.15 },
+          medical:      { personal: 0.02,  lower: 6236, upper: 31179, employer: 0.065 },
+          unemployment: { personal: 0.002, lower: 2500, upper: 41112, employer: 0.008 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2500, upper: 39828 }
         }
       },
@@ -123,9 +134,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2026-07', '2027-06'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 5510, upper: 27549 },
-          medical:      { personal: 0.02,  lower: 6236, upper: 31179 },
-          unemployment: { personal: 0.002, lower: 2680, upper: 41112 },
+          pension:      { personal: 0.08,  lower: 5510, upper: 27549, employer: 0.15 },
+          medical:      { personal: 0.02,  lower: 6236, upper: 31179, employer: 0.065 },
+          unemployment: { personal: 0.002, lower: 2680, upper: 41112, employer: 0.008 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2680, upper: 41697 }
         }
       }
@@ -139,9 +151,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2025-07', '2026-06'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4775, upper: 27549 },
-          medical:      { personal: 0.02,  lower: 6727, upper: 33633 },
-          unemployment: { personal: 0.003, lower: 2520, upper: 44265 },
+          pension:      { personal: 0.08,  lower: 4775, upper: 27549, employer: 0.15 },
+          medical:      { personal: 0.02,  lower: 6727, upper: 33633, employer: 0.052 },
+          unemployment: { personal: 0.003, lower: 2520, upper: 44265, employer: 0.007 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2360, upper: 44265 }
         }
       },
@@ -150,9 +163,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2026-07', '2027-06'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4775, upper: 27549 },
-          medical:      { personal: 0.02,  lower: 6727, upper: 33633 },
-          unemployment: { personal: 0.003, lower: 2700, upper: 48471 },
+          pension:      { personal: 0.08,  lower: 4775, upper: 27549, employer: 0.15 },
+          medical:      { personal: 0.02,  lower: 6727, upper: 33633, employer: 0.052 },
+          unemployment: { personal: 0.003, lower: 2700, upper: 48471, employer: 0.007 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2700, upper: 44265 }
         }
       }
@@ -166,9 +180,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2025-01', '2025-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4812, upper: 24930 },
-          medical:      { personal: 0.02,  lower: 4812, upper: 24930 },
-          unemployment: { personal: 0.005, lower: 4812, upper: 24930 },
+          pension:      { personal: 0.08,  lower: 4812, upper: 24930, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4812, upper: 24930, employer: 0.099 },
+          unemployment: { personal: 0.005, lower: 4812, upper: 24930, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2490, upper: 28695 }
         }
       },
@@ -177,9 +192,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2026-01', '2026-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4986, upper: 24930 },
-          medical:      { personal: 0.02,  lower: 4986, upper: 24930 },
-          unemployment: { personal: 0.005, lower: 4986, upper: 24930 },
+          pension:      { personal: 0.08,  lower: 4986, upper: 24930, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4986, upper: 24930, employer: 0.099 },
+          unemployment: { personal: 0.005, lower: 4986, upper: 24930, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2660, upper: 28695 }
         }
       }
@@ -193,9 +209,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2025-01', '2025-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4952, upper: 24762 },
-          medical:      { personal: 0.02,  lower: 4952, upper: 24762 },
-          unemployment: { personal: 0.005, lower: 4952, upper: 24762 },
+          pension:      { personal: 0.08,  lower: 4952, upper: 24762, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4952, upper: 24762, employer: 0.085 },
+          unemployment: { personal: 0.005, lower: 4952, upper: 24762, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2490, upper: 27600 }
         }
       },
@@ -204,9 +221,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2026-01', '2026-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4952, upper: 24762 },
-          medical:      { personal: 0.02,  lower: 4952, upper: 24762 },
-          unemployment: { personal: 0.005, lower: 4952, upper: 24762 },
+          pension:      { personal: 0.08,  lower: 4952, upper: 24762, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4952, upper: 24762, employer: 0.085 },
+          unemployment: { personal: 0.005, lower: 4952, upper: 24762, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2490, upper: 27600 }
         }
       }
@@ -220,9 +238,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2025-01', '2025-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4952, upper: 24762 },
-          medical:      { personal: 0.02,  lower: 4952, upper: 24762 },
-          unemployment: { personal: 0.005, lower: 4952, upper: 24762 },
+          pension:      { personal: 0.08,  lower: 4952, upper: 24762, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4952, upper: 24762, employer: 0.07 },
+          unemployment: { personal: 0.005, lower: 4952, upper: 24762, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2490, upper: 24396 }
         }
       },
@@ -231,9 +250,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2026-01', '2026-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4952, upper: 24762 },
-          medical:      { personal: 0.02,  lower: 4952, upper: 24762 },
-          unemployment: { personal: 0.005, lower: 4952, upper: 24762 },
+          pension:      { personal: 0.08,  lower: 4952, upper: 24762, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4952, upper: 24762, employer: 0.07 },
+          unemployment: { personal: 0.005, lower: 4952, upper: 24762, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2490, upper: 24396 }
         }
       }
@@ -247,9 +267,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2025-01', '2025-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4511, upper: 22555 },
-          medical:      { personal: 0.02,  lower: 4511, upper: 22555 },
-          unemployment: { personal: 0.005, lower: 4511, upper: 22555 },
+          pension:      { personal: 0.08,  lower: 4511, upper: 22555, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4511, upper: 22555, employer: 0.069 },
+          unemployment: { personal: 0.005, lower: 4511, upper: 22555, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2100, upper: 27420 }
         }
       },
@@ -258,9 +279,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2026-01', '2026-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4511, upper: 22555 },
-          medical:      { personal: 0.02,  lower: 4511, upper: 22555 },
-          unemployment: { personal: 0.005, lower: 4511, upper: 22555 },
+          pension:      { personal: 0.08,  lower: 4511, upper: 22555, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4511, upper: 22555, employer: 0.069 },
+          unemployment: { personal: 0.005, lower: 4511, upper: 22555, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2330, upper: 32969 }
         }
       }
@@ -274,9 +296,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2025-01', '2025-12'],
         pending: false,
         items: {
-          pension:      { personal: 0.08,  lower: 4404, upper: 22017 },
-          medical:      { personal: 0.02,  lower: 4404, upper: 22017 },
-          unemployment: { personal: 0.005, lower: 4404, upper: 22017 },
+          pension:      { personal: 0.08,  lower: 4404, upper: 22017, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4404, upper: 22017, employer: 0.085 },
+          unemployment: { personal: 0.005, lower: 4404, upper: 22017, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2100, upper: 26514 }
         }
       },
@@ -285,9 +308,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2026-01', '2026-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4404, upper: 22017 },
-          medical:      { personal: 0.02,  lower: 4404, upper: 22017 },
-          unemployment: { personal: 0.005, lower: 4404, upper: 22017 },
+          pension:      { personal: 0.08,  lower: 4404, upper: 22017, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4404, upper: 22017, employer: 0.085 },
+          unemployment: { personal: 0.005, lower: 4404, upper: 22017, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2100, upper: 26514 }
         }
       }
@@ -301,9 +325,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2025-01', '2025-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4494, upper: 22470 },
-          medical:      { personal: 0.02,  lower: 4494, upper: 22470 },
-          unemployment: { personal: 0.005, lower: 4494, upper: 22470 },
+          pension:      { personal: 0.08,  lower: 4494, upper: 22470, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4494, upper: 22470, employer: 0.08 },
+          unemployment: { personal: 0.005, lower: 4494, upper: 22470, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2210, upper: 28092 }
         }
       },
@@ -312,9 +337,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2026-01', '2026-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4494, upper: 22470 },
-          medical:      { personal: 0.02,  lower: 4494, upper: 22470 },
-          unemployment: { personal: 0.005, lower: 4494, upper: 22470 },
+          pension:      { personal: 0.08,  lower: 4494, upper: 22470, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4494, upper: 22470, employer: 0.08 },
+          unemployment: { personal: 0.005, lower: 4494, upper: 22470, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2210, upper: 28092 }
         }
       }
@@ -328,9 +354,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2025-01', '2025-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4369, upper: 21846 },
-          medical:      { personal: 0.02,  lower: 4369, upper: 21846 },
-          unemployment: { personal: 0.005, lower: 4369, upper: 21846 },
+          pension:      { personal: 0.08,  lower: 4369, upper: 21846, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4369, upper: 21846, employer: 0.08 },
+          unemployment: { personal: 0.005, lower: 4369, upper: 21846, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2160, upper: 26412 }
         }
       },
@@ -339,9 +366,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2026-01', '2026-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 4737, upper: 23685 },
-          medical:      { personal: 0.02,  lower: 4737, upper: 23685 },
-          unemployment: { personal: 0.005, lower: 4737, upper: 23685 },
+          pension:      { personal: 0.08,  lower: 4737, upper: 23685, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 4737, upper: 23685, employer: 0.08 },
+          unemployment: { personal: 0.005, lower: 4737, upper: 23685, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2160, upper: 26412 }
         }
       }
@@ -355,9 +383,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2025-01', '2025-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 5013, upper: 25065 },
-          medical:      { personal: 0.02,  lower: 5013, upper: 25065 },
-          unemployment: { personal: 0.005, lower: 5013, upper: 25065 },
+          pension:      { personal: 0.08,  lower: 5013, upper: 25065, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 5013, upper: 25065, employer: 0.10 },
+          unemployment: { personal: 0.005, lower: 5013, upper: 25065, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2180, upper: 25539 }
         }
       },
@@ -366,9 +395,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2026-01', '2026-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: 5013, upper: 25065 },
-          medical:      { personal: 0.02,  lower: 5013, upper: 25065 },
-          unemployment: { personal: 0.005, lower: 5013, upper: 25065 },
+          pension:      { personal: 0.08,  lower: 5013, upper: 25065, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: 5013, upper: 25065, employer: 0.10 },
+          unemployment: { personal: 0.005, lower: 5013, upper: 25065, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null,  employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: 2180, upper: 25539 }
         }
       }
@@ -382,9 +412,10 @@ window.CITY_POLICY_LIBRARY_DATA = {
         effective: ['2000-01', '2999-12'],
         pending: true,
         items: {
-          pension:      { personal: 0.08,  lower: null, upper: null },
-          medical:      { personal: 0.02,  lower: null, upper: null },
-          unemployment: { personal: 0.005, lower: null, upper: null },
+          pension:      { personal: 0.08,  lower: null, upper: null, employer: 0.16 },
+          medical:      { personal: 0.02,  lower: null, upper: null, employer: 0.08 },
+          unemployment: { personal: 0.005, lower: null, upper: null, employer: 0.005 },
+          injury:       { personal: 0,     lower: null, upper: null, employer: 0.002 },
           fund:         { personal: 0.05, rates: [0.05, 0.06, 0.08, 0.10, 0.12], lower: null, upper: null }
         }
       }

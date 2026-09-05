@@ -299,6 +299,57 @@
     padding: 14px 16px;
   }
 
+  /* 逐月明细宽表：卡片破格变宽 + 横向滚动兜底 + 首列悬浮，避免多列被挤压换行 */
+  .card-wide {
+    width: min(1480px, calc(100vw - 48px));
+    margin-left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .detail-table {
+    min-width: 1080px;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .detail-table.salary { min-width: 1340px; }
+  .detail-table th,
+  .detail-table td { padding: 10px 12px; }
+  .detail-table td:first-child { white-space: nowrap; }
+  .detail-table th:first-child,
+  .detail-table td:first-child:not(.span-row) {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--surface);
+    box-shadow: 1px 0 0 var(--border);
+  }
+  .detail-table th:first-child { background: var(--surface2); }
+  .detail-table tr.bonus-row { background: rgba(116,185,255,0.06); }
+  .detail-table tr.bonus-row td:first-child {
+    background-image: linear-gradient(rgba(116,185,255,0.06), rgba(116,185,255,0.06));
+  }
+  .detail-table tr.subtotal-row { background: var(--surface2); font-weight: 600; }
+  .detail-table tr.subtotal-row td:first-child { background: var(--surface2); }
+  .detail-table tr.total-row td:first-child { background: var(--surface2); }
+
+  /* 备注列：行名单行；政策标签拆「城市·年度」+ 括号明细，明细默认单行省略，点击展开/收起 */
+  .note-name { font-weight: 600; white-space: nowrap; }
+  .note-policy {
+    max-width: 230px;
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--text2);
+  }
+  .note-policy-detail {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: zoom-in;
+  }
+  .note-policy-detail.expanded { white-space: normal; cursor: zoom-out; }
+
   /* Summary */
   .summary-grid {
     display: grid;
@@ -764,7 +815,9 @@
   <div class="info-box" id="info-salary" style="display:none;">
     <strong>📌 适用场景：</strong>单位发放的<strong>工资薪金</strong>所得，按<strong>累计预扣法</strong>预扣预缴个税（依据：国家税务总局公告2020年第13号）。<br>
     <strong>📌 计税公式：</strong>累计应纳税所得额 = 累计应发工资 − 累计减除费用（5,000元/月） − 累计三险一金（个人部分） − 累计专项附加扣除；本期预扣 = 累计应纳税额 − 累计已预扣。<br>
-    <strong>📌 税后实发：</strong>应发工资 − 个人三险一金 − 个人所得税。三险一金按「工资参数」中的基数×比例自动计算，比例可按所在城市调整。<br>
+    <strong>📌 税后实发：</strong>应发工资 − 个人三险一金 − 个人所得税。三险一金按「工资参数」中的基数×比例自动计算（个人与单位部分分列），比例可按所在城市调整。<br>
+    <strong>📌 年终奖：</strong>全年一次性奖金可选<strong>单独计税</strong>（奖金 ÷12 定档：应纳税额 = 奖金 × 月度税率 − 速算扣除数，每年限一次）或<strong>并入综合所得</strong>（计入发放月累计），系统自动对比并推荐更优方案；奖金命中「无效区间」（如 36,000~38,566.67）时提示避坑。<br>
+    <strong>📌 企业成本：</strong>结果同时给出单位部分社保公积金与企业用工总成本（应发工资 + 单位缴纳），比例在「政策数据管理」中可核对调整。<br>
     <strong>📌 税率表：</strong>≤36,000 → 3%、≤144,000 → 10%、≤300,000 → 20%、≤420,000 → 25%、≤660,000 → 30%、≤960,000 → 35%、>960,000 → 45%<br>
     <strong>📌 跨年规则：</strong>每年1月起，累计收入、累计已预扣税额、累计减除费用均归零重新起算；工资薪金不适用「断月重置」与 2025 年 10 月政策切换。
   </div>
@@ -790,6 +843,15 @@
       <div class="sp-field"><label>社保基数（元/月）</label><input type="number" id="sp-social-base" min="0" step="0.01" placeholder="如 10000" oninput="readSalaryParams()"></div>
       <div class="sp-field"><label>公积金基数（元/月）</label><input type="number" id="sp-fund-base" min="0" step="0.01" placeholder="留空跟随社保基数" oninput="readSalaryParams()"></div>
       <div class="sp-field"><label>专项附加扣除（元/月）</label><input type="number" id="sp-extra-deduction" min="0" step="0.01" placeholder="如 1500" oninput="readSalaryParams()"></div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;">
+          <input type="checkbox" id="sp-extra-detail-on" onchange="onExtraDetailToggle()"> 专项附加扣除按项分列（子女教育/婴幼儿/房贷房租等 7 项，含政策校验）
+        </label>
+        <span id="sp-extra-total-hint" style="margin-left:auto;font-size:12px;color:var(--green);font-weight:600;"></span>
+      </div>
+      <div id="sp-extra-detail-wrap" style="display:none;"></div>
     </div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;font-size:12px;color:var(--text2);">
       <span>政策预览月份：</span>
@@ -874,6 +936,18 @@
 
       <div class="month-grid" id="month-grid"></div>
 
+      <div id="multi-bonus-row" style="display:none;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">年终奖（全年一次性奖金，税前，可选）</div>
+          <input type="number" id="multi-bonus-amount" min="0" step="0.01" placeholder="如 36000" style="width:160px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px;outline:none;">
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">发放月份</div>
+          <select id="multi-bonus-month" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px;"></select>
+        </div>
+        <div style="font-size:12px;color:var(--text2);padding-bottom:8px;flex:1;min-width:220px;">自动对比「单独计税（÷12 定档）」与「并入综合所得」并推荐更优方案；单独计税每人每年限用一次，命中无效区间会提示避坑。</div>
+      </div>
+
       <div class="btn-row">
         <button class="btn btn-primary" onclick="calcMulti()">计算全部</button>
         <button class="btn btn-secondary" onclick="resetMulti()">清空</button>
@@ -908,7 +982,7 @@
           <strong>📋 表格格式要求（工资薪金）：</strong><br>
           <strong>识别列（至少填一项）：</strong><strong>姓名</strong>、<strong>身份证号</strong>、<strong>电话</strong>、<strong>银行卡号</strong><br>
           <strong>数据列：</strong><strong>月份</strong>、<strong>应发工资</strong>（或实发工资，按计算方向选择）<br>
-          <strong>可选列：</strong><strong>城市</strong>（广州/深圳等，按行内城市政策计算）、<strong>社保基数</strong>、<strong>公积金基数</strong>、<strong>公积金比例</strong>（按行择档，填 5 = 5%，兼容 0.05、"5%"）、<strong>专项附加扣除</strong>——行内有值时优先使用，缺失时回退到整批城市选择和「工资参数」全局设置；三险一金按基数×城市政策自动计算，无需导入<br>
+          <strong>可选列：</strong><strong>城市</strong>（广州/深圳等，按行内城市政策计算）、<strong>社保基数</strong>、<strong>公积金基数</strong>、<strong>公积金比例</strong>（按行择档，填 5 = 5%，兼容 0.05、"5%"）、<strong>专项附加扣除</strong>、<strong>年终奖</strong>（全年一次性奖金，按人按年计一次，自动对比单独计税与并入综合所得并择优）——行内有值时优先使用，缺失时回退到整批城市选择和「工资参数」全局设置；三险一金按基数×城市政策自动计算（结果同时给出个人与单位部分、企业用工总成本），无需导入<br>
           <em>列顺序不限，系统自动识别，可在列映射界面手动调整。每人按月累计预扣，同月多笔合并计税，跨年自动重置，不适用断月重置。政策上下限/比例为参考值，请以当地公布为准。</em>
         </div>
       </div>
@@ -946,6 +1020,54 @@ function getBracket(taxableIncome) {
     if (taxableIncome <= b.upTo) return b;
   }
   return BRACKETS[BRACKETS.length - 1];
+}
+
+// ==================== 年终奖（全年一次性奖金） ====================
+
+/* 全年一次性奖金单独计税用的月度税率表（按奖金 ÷12 找档，财税〔2018〕164号） */
+const MONTHLY_BRACKETS = [
+  { upTo: 3000,     rate: 0.03, quick: 0 },
+  { upTo: 12000,    rate: 0.10, quick: 210 },
+  { upTo: 25000,    rate: 0.20, quick: 1410 },
+  { upTo: 35000,    rate: 0.25, quick: 2660 },
+  { upTo: 55000,    rate: 0.30, quick: 4410 },
+  { upTo: 80000,    rate: 0.35, quick: 7160 },
+  { upTo: Infinity, rate: 0.45, quick: 15160 },
+];
+
+function getMonthlyBracket(bonus) {
+  const monthly = (Number(bonus) || 0) / 12;
+  for (const b of MONTHLY_BRACKETS) {
+    if (monthly <= b.upTo) return b;
+  }
+  return MONTHLY_BRACKETS[MONTHLY_BRACKETS.length - 1];
+}
+
+/** 年终奖单独计税：应纳税额 = 奖金 × 按奖金÷12 确定的税率 − 速算扣除数（每年限用一次） */
+function calcBonusTaxSeparate(bonus) {
+  const b = getMonthlyBracket(Number(bonus) || 0);
+  return Math.max(0, round2((Number(bonus) || 0) * b.rate - b.quick));
+}
+
+/* 年终奖「无效区间」：奖金落在区间内时，多发反而到手更少——
+   区间下沿为月度税率表临界点 ×12，上沿为税后所得恰好等于下沿税后所得的奖金额 */
+const BONUS_TRAP_ZONES = (() => {
+  const zones = [];
+  for (let i = 0; i < MONTHLY_BRACKETS.length - 1; i++) {
+    const low = MONTHLY_BRACKETS[i], high = MONTHLY_BRACKETS[i + 1];
+    const edge = low.upTo * 12;
+    const taxAtEdge = edge * low.rate - low.quick;
+    const netAtEdge = edge - taxAtEdge;
+    const upper = round2((netAtEdge - high.quick) / (1 - high.rate));
+    zones.push({ from: edge, to: upper, suggest: edge });
+  }
+  return zones;
+})();
+
+/** 命中无效区间返回 { from, to, suggest }，否则 null */
+function findBonusTrapZone(bonus) {
+  const v = Number(bonus) || 0;
+  return BONUS_TRAP_ZONES.find(z => v > z.from && v <= z.to) || null;
 }
 
 /**
@@ -1155,21 +1277,26 @@ var batchGapReset = true;
 var incomeType = 'labor';
 
 /* ==================== 城市社保公积金政策库 ====================
- * 三层结构：城市 → 年度（含生效月区间）→ 险种（养老/医疗/失业/公积金）
- * 每个险种：personal 个人比例(小数)、lower/upper 基数上下限（null = 不限）
- * 公积金额外：rates 可选比例数组（公司择档 5%~12%）
+ * 三层结构：城市 → 年度（含生效月区间）→ 险种（养老/医疗(含生育)/失业/工伤/公积金）
+ * 每个险种：personal 个人比例(小数)、employer 单位比例(小数)、lower/upper 基数上下限（null = 不限）
+ * 公积金额外：rates 可选比例数组（公司择档 5%~12%）；fund.employer 缺省表示单位与个人同档
  * 内置数值为参考值（pending: true），请以当地社保部门公布为准，可在政策管理弹层修改/导入。
  */
-function siItem(personal, lower, upper) { return { personal: personal, lower: lower, upper: upper }; }
-function fundItem(rates, personal, lower, upper) { return { personal: personal, rates: rates, lower: lower, upper: upper }; }
+function siItem(personal, lower, upper, employer) { return { personal: personal, lower: lower, upper: upper, employer: employer || 0 }; }
+function fundItem(rates, personal, lower, upper, employer) {
+  const it = { personal: personal, rates: rates, lower: lower, upper: upper };
+  if (employer != null) it.employer = employer;
+  return it;
+}
 
 const SI_ITEMS = [
   { key: 'pension', label: '养老' },
   { key: 'medical', label: '医疗(含生育)' },
   { key: 'unemployment', label: '失业' },
+  { key: 'injury', label: '工伤' },
   { key: 'fund', label: '公积金' },
 ];
-const SI_ITEM_LABELS = { pension: '养老', medical: '医疗(含生育)', unemployment: '失业', fund: '公积金' };
+const SI_ITEM_LABELS = { pension: '养老', medical: '医疗(含生育)', unemployment: '失业', injury: '工伤', fund: '公积金' };
 
 const FUND_RATES_STD = [0.05, 0.06, 0.08, 0.10, 0.12];
 
@@ -1246,9 +1373,10 @@ const CITY_POLICY_LIBRARY = loadPolicyLibrary() ||
             effective: ['2000-01', '2999-12'],
             pending: true,
             items: {
-              pension:      siItem(0.08, null, null),
-              medical:      siItem(0.02, null, null),
-              unemployment: siItem(0.005, null, null),
+              pension:      siItem(0.08, null, null, 0.16),
+              medical:      siItem(0.02, null, null, 0.08),
+              unemployment: siItem(0.005, null, null, 0.005),
+              injury:       siItem(0, null, null, 0.002),
               fund:         fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
             }
           }
@@ -1257,9 +1385,63 @@ const CITY_POLICY_LIBRARY = loadPolicyLibrary() ||
     });
 window._policyStorageAvailable = policyStorageAvailable();
 
+/**
+ * 政策库规范化：险种按 SI_ITEMS 顺序重排、字段按规范顺序重建；
+ * 旧版本存档（无单位比例 employer / 无工伤 injury）从种子按字段级回退补齐，
+ * 只补缺失字段，不覆盖用户已改过的任何数值。
+ */
+function normalizePolicyLibrary(lib) {
+  const seed = (window.CITY_POLICY_LIBRARY_DATA && typeof window.CITY_POLICY_LIBRARY_DATA === 'object')
+    ? window.CITY_POLICY_LIBRARY_DATA : null;
+  Object.keys(lib).forEach(ck => {
+    const city = lib[ck];
+    if (!city || typeof city !== 'object' || !city.years || typeof city.years !== 'object') return;
+    const years = {};
+    Object.keys(city.years).forEach(yk => {
+      const rec = city.years[yk];
+      if (!rec || typeof rec !== 'object' || !rec.items || typeof rec.items !== 'object') { years[yk] = rec; return; }
+      const seedRec = seed && seed[ck] && seed[ck].years && seed[ck].years[yk];
+      const items = {};
+      SI_ITEMS.forEach(it => {
+        let item = rec.items[it.key];
+        const seedItem = seedRec && seedRec.items ? seedRec.items[it.key] : null;
+        // 旧存档缺整个险种（如工伤）：从种子整项补入
+        if (!item && seedItem) item = JSON.parse(JSON.stringify(seedItem));
+        if (!item) return;
+        // 旧存档缺单位比例字段：从种子按字段回退
+        if (item.employer == null && seedItem && seedItem.employer != null) item.employer = seedItem.employer;
+        // 按规范字段顺序重建（保证 JSON roundtrip / 导出导入的键序一致）
+        const n = (it.key === 'fund')
+          ? { personal: item.personal, rates: item.rates, lower: item.lower, upper: item.upper }
+          : { personal: item.personal, lower: item.lower, upper: item.upper };
+        if (item.employer != null) n.employer = item.employer;
+        Object.keys(item).forEach(k => { if (!(k in n)) n[k] = item[k]; });
+        items[it.key] = n;
+      });
+      years[yk] = { label: rec.label, effective: rec.effective, pending: rec.pending, items: items };
+    });
+    lib[ck] = { name: city.name, years: years };
+  });
+}
+normalizePolicyLibrary(CITY_POLICY_LIBRARY);
+
 /* 数据文件是否缺失（仅剩自定义城市） */
 function isPolicyDataFileMissing() {
   return Object.keys(CITY_POLICY_LIBRARY).length <= 1 && !!CITY_POLICY_LIBRARY.custom;
+}
+
+/* 专项附加扣除分项默认值（金额为 2023-01 起国家统一标准） */
+function extraDetailDefaults() {
+  return {
+    on: false,                                    // 是否启用分项模式（关闭时用单一总额 extraDeduction）
+    childEducation: { on: false, count: 1 },      // 子女教育 2000 元/月/孩
+    infantCare:     { on: false, count: 1 },      // 3岁以下婴幼儿照护 2000 元/月/孩
+    education:      { on: false, kind: 'degree', certMonth: '' }, // 继续教育：学历 400/月 | 职业资格 3600 取得当月
+    houseLoan:      { on: false },                // 住房贷款利息 1000 元/月（首套，与房租互斥）
+    houseRent:      { on: false, tier: 1500 },    // 住房租金 1500/1100/800 元/月（按城市档）
+    support:        { on: false, mode: 'solo', share: 1500 }, // 赡养老人：独生 3000 | 分摊每人 ≤1500
+    medical:        { on: false, annual: 0 }      // 大病医疗（年度，仅汇算清缴可用，不参与预扣）
+  };
 }
 
 /* 工资薪金参数（多月累计与批量计算共用） */
@@ -1269,8 +1451,138 @@ var salaryParams = {
   socialBase: 0,       // 社保缴费基数（元/月）；0 = 未设置
   fundBase: '',        // 公积金基数；'' = 跟随社保基数
   fundRate: 0.05,      // 公积金个人比例（城市择档或自定义手填）
-  extraDeduction: 0    // 专项附加扣除（元/月）
+  extraDeduction: 0,   // 专项附加扣除单一总额（元/月）——分项模式关闭时生效
+  extraDetail: extraDetailDefaults() // 专项附加扣除分项
 };
+
+/* 住房租金城市档位建议：直辖市/省会/计划单列市 1500；市辖区户籍人口≤100万的城市 800，其余 1100 */
+const HOUSE_RENT_TIER_HINTS = { suzhou: 1100 };
+function suggestHouseRentTier(cityId) { return HOUSE_RENT_TIER_HINTS[cityId] || 1500; }
+
+/**
+ * 按分项明细计算某月专项附加扣除（元）
+ * @returns {{total, messages:string[], medicalAnnual:number}} 大病医疗不参与月度预扣，仅返回年度金额供汇算提示
+ */
+function computeExtraDetailFor(detail, ym) {
+  const msgs = [];
+  const d = detail || {};
+  let total = 0;
+  if (d.childEducation && d.childEducation.on) {
+    total += 2000 * Math.max(0, Math.floor(Number(d.childEducation.count) || 0));
+  }
+  if (d.infantCare && d.infantCare.on) {
+    total += 2000 * Math.max(0, Math.floor(Number(d.infantCare.count) || 0));
+  }
+  if (d.education && d.education.on) {
+    if (d.education.kind === 'cert') {
+      if (ym && d.education.certMonth === ym) total += 3600;
+    } else {
+      total += 400;
+    }
+  }
+  if (d.houseLoan && d.houseLoan.on && d.houseRent && d.houseRent.on) {
+    msgs.push('住房贷款利息与住房租金互斥，不得同时扣除（按房贷优先计）');
+  }
+  if (d.houseLoan && d.houseLoan.on) {
+    total += 1000;
+  } else if (d.houseRent && d.houseRent.on) {
+    total += Math.max(0, Number(d.houseRent.tier) || 0);
+  }
+  if (d.support && d.support.on) {
+    if (d.support.mode === 'solo') {
+      total += 3000;
+    } else {
+      const share = Math.max(0, Number(d.support.share) || 0);
+      if (share > 1500) msgs.push('赡养老人非独生子女分摊扣除每人每月不超过 1500 元，已按 1500 计');
+      total += Math.min(share, 1500);
+    }
+  }
+  const medicalAnnual = (d.medical && d.medical.on) ? Math.max(0, Number(d.medical.annual) || 0) : 0;
+  if (medicalAnnual > 0) {
+    msgs.push('大病医疗不参与每月预扣预缴，年度汇算清缴时可申报（医保目录内自付累计超 15,000 元的部分，限额 80,000 元）');
+  }
+  return { total: total, messages: msgs, medicalAnnual: medicalAnnual };
+}
+
+/** 月度专项附加扣除（元）：分项模式按月计算（含职业资格取证月 3600），否则用单一总额 */
+function getExtraDeductionFor(ym) {
+  if (salaryParams.extraDetail && salaryParams.extraDetail.on) {
+    return computeExtraDetailFor(salaryParams.extraDetail, ym);
+  }
+  return { total: Math.max(0, Number(salaryParams.extraDeduction) || 0), messages: [], medicalAnnual: 0 };
+}
+
+/* ==================== 年终奖方案对比 ==================== */
+
+/**
+ * 工资薪金年度累计税额（纯计算，供年终奖方案对比复用）
+ * @param {Array<{month:'YYYY-MM', amount:number, si?:number, extra?:number}>} entries 按月升序（同月多笔按序）
+ */
+function calcSalaryCumulativeTax(entries) {
+  let cumIncome = 0, cumTax = 0, cumDeduction = 0, lastMonth = '';
+  let totalTax = 0;
+  (entries || []).forEach(e => {
+    if (e.month !== lastMonth) {
+      lastMonth = e.month;
+      cumDeduction += 5000 + (e.si || 0) + (e.extra || 0);
+    }
+    const r = calcTaxForward(e.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary,
+      { socialInsurance: e.si || 0, extraDeduction: e.extra || 0 });
+    cumIncome = r.cumIncome;
+    cumTax = r.cumTaxDue;
+    totalTax += r.currentTax;
+  });
+  return round2(totalTax);
+}
+
+/** 将年终奖作为一笔收入插入发放月（排在当月工资之后；当月无工资时插到月序合适处） */
+function mergeBonusIntoEntries(entries, bonus) {
+  const list = (entries || []).slice();
+  const bEntry = { month: bonus.month, amount: Number(bonus.amount) || 0, si: 0, extra: 0, isBonus: true };
+  let inserted = false;
+  for (let i = 0; i < list.length; i++) {
+    const next = list[i + 1];
+    if (list[i].month === bonus.month && (!next || next.month !== bonus.month)) {
+      list.splice(i + 1, 0, bEntry);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) {
+    let idx = 0;
+    for (let i = 0; i < list.length; i++) {
+      if ((list[i].month || '') <= bonus.month) idx = i + 1;
+    }
+    list.splice(idx, 0, bEntry);
+  }
+  return list;
+}
+
+/**
+ * 年终奖计税方案对比：单独计税 vs 并入综合所得
+ * @param {Array} salaryEntries 不含年终奖的工资月度序列 [{month, amount, si, extra}]
+ * @param {{amount:number, month:'YYYY-MM'}} bonus
+ * @returns {object} 两方案税额、推荐方式、节税额与无效区间提示
+ */
+function compareBonusStrategies(salaryEntries, bonus) {
+  const salaryOnlyTax = calcSalaryCumulativeTax(salaryEntries);
+  const separateTax = calcBonusTaxSeparate(bonus.amount);
+  const combinedEntries = mergeBonusIntoEntries(salaryEntries, bonus);
+  const combinedTotalTax = calcSalaryCumulativeTax(combinedEntries);
+  const combinedBonusTax = round2(combinedTotalTax - salaryOnlyTax);
+  return {
+    bonus: Number(bonus.amount) || 0,
+    bonusMonth: bonus.month,
+    salaryOnlyTax: salaryOnlyTax,
+    separateTax: separateTax,
+    combinedBonusTax: combinedBonusTax,
+    combinedTotalTax: combinedTotalTax,
+    separateTotalTax: round2(salaryOnlyTax + separateTax),
+    recommendation: separateTax <= combinedBonusTax ? 'separate' : 'combined',
+    saving: round2(Math.abs(separateTax - combinedBonusTax)),
+    trap: findBonusTrapZone(bonus.amount)
+  };
+}
 
 /* 批量城市相关状态 */
 var batchCityId = '';      // '' = 跟随工资参数
@@ -1346,24 +1658,51 @@ function clampItemBase(base, item) {
 }
 
 /**
- * 三险一金个人部分（月），逐险种 clamp 后乘比例
- * 社保保留到分（round2）；公积金月缴存额按惯例四舍五入取整到元
- * @returns {{pension, medical, unemployment, fund, total, fundRateUsed}} 各险种实缴与合计（round2）；fundRateUsed 为实际生效的公积金比例
+ * 三险一金：个人部分 + 单位部分（月），逐险种 clamp 后乘比例
+ * 社保保留到分（round2）；公积金月缴存额按惯例四舍五入取整到元（单位同规则）
+ * 单位公积金比例：fund.employer 缺省时与个人同档（多数城市要求同比例缴存）
+ * @returns {{pension, medical, unemployment, fund, total, fundRateUsed,
+ *            employer:{pension,medical,unemployment,injury,fund,total},
+ *            socialBaseRaw, fundBaseRaw}} 各险种实缴与合计（round2）；fundRateUsed 为实际生效的公积金比例；
+ *            socialBaseRaw/fundBaseRaw 为参与计算（clamp 前）的原始基数，供公式导出复现
  */
 function computeSocialInsuranceDetail(socialBase, fundBase, items, fundRate) {
   const fr = (fundRate == null || fundRate === '' || isNaN(Number(fundRate))) ? (items.fund.personal || 0) : Number(fundRate);
+  const rawFund = (fundBase === '' || fundBase == null || isNaN(parseFloat(fundBase))) ? socialBase : fundBase;
+  const socialRaw = Number(socialBase) || 0;
+  const fundRaw = Number(rawFund) || 0;
+
   const pension = clampItemBase(socialBase, items.pension) * items.pension.personal;
   const medical = clampItemBase(socialBase, items.medical) * items.medical.personal;
   const unemployment = clampItemBase(socialBase, items.unemployment) * items.unemployment.personal;
-  const rawFund = (fundBase === '' || fundBase == null || isNaN(parseFloat(fundBase))) ? socialBase : fundBase;
   const fund = Math.round(clampItemBase(rawFund, items.fund) * fr);
+
+  const erRate = (k) => (items[k] && items[k].employer != null) ? items[k].employer : 0;
+  const erPension = clampItemBase(socialBase, items.pension) * erRate('pension');
+  const erMedical = clampItemBase(socialBase, items.medical) * erRate('medical');
+  const erUnemployment = clampItemBase(socialBase, items.unemployment) * erRate('unemployment');
+  const injuryItem = items.injury || { lower: null, upper: null };
+  const erInjury = clampItemBase(socialBase, injuryItem) * ((items.injury && items.injury.employer != null) ? items.injury.employer : 0);
+  const erFundRate = (items.fund.employer != null) ? items.fund.employer : fr;
+  const erFund = Math.round(clampItemBase(rawFund, items.fund) * erFundRate);
+
   return {
     pension: round2(pension),
     medical: round2(medical),
     unemployment: round2(unemployment),
     fund: round2(fund),
     total: round2(pension + medical + unemployment + fund),
-    fundRateUsed: fr
+    fundRateUsed: fr,
+    employer: {
+      pension: round2(erPension),
+      medical: round2(erMedical),
+      unemployment: round2(erUnemployment),
+      injury: round2(erInjury),
+      fund: round2(erFund),
+      total: round2(erPension + erMedical + erUnemployment + erInjury + erFund)
+    },
+    socialBaseRaw: socialRaw,
+    fundBaseRaw: fundRaw
   };
 }
 
@@ -1405,6 +1744,7 @@ function setIncomeType(type) {
   show('batch-info-labor', !showSalary);
   show('batch-info-salary', showSalary);
   show('multi-gap-row', !showSalary);   // 断月重置不适用于工资薪金
+  show('multi-bonus-row', showSalary);  // 年终奖仅工资薪金适用
   updateMultiInputHints();
 }
 
@@ -1444,6 +1784,10 @@ function onCityParamChange() {
       }
     }
   }
+  // 住房租金档位按城市自动推荐（用户手动改过档位后不再覆盖）
+  if (!salaryParams.extraDetail.houseRent.tierUntouched) {
+    salaryParams.extraDetail.houseRent.tier = suggestHouseRentTier(cityId);
+  }
   readSalaryParams();
 }
 
@@ -1461,26 +1805,33 @@ function renderSalaryItemsTable() {
   const pol = resolvePolicy(salaryParams.cityId, previewYM);
   const det = computeSocialInsuranceDetail(salaryParams.socialBase, salaryParams.fundBase, pol.items, salaryParams.fundRate);
   const fmtBound = (v) => (v == null ? '不限' : formatNum(v));
+  const fmtRate = (r) => (r == null ? '同个人档' : ((r * 100).toFixed(1).replace(/\.0$/, '') + '%'));
   el.innerHTML = `
     <thead>
       <tr>
-        <th colspan="5" style="text-align:left;color:var(--text2);font-weight:500;">适用政策（按预览月份 ${previewYM} 匹配）：${pol.label}${pol.matched ? '' : '（未精确匹配月份，已用最新年度）'}${pol.items && CITY_POLICY_LIBRARY[pol.cityKey].years[pol.yearKey].pending ? ' · 参考值待核对' : ''}</th>
+        <th colspan="7" style="text-align:left;color:var(--text2);font-weight:500;">适用政策（按预览月份 ${previewYM} 匹配）：${pol.label}${pol.matched ? '' : '（未精确匹配月份，已用最新年度）'}${pol.items && CITY_POLICY_LIBRARY[pol.cityKey].years[pol.yearKey].pending ? ' · 参考值待核对' : ''}</th>
       </tr>
-      <tr><th>险种</th><th>个人比例</th><th>基数下限</th><th>基数上限</th><th>按当前基数实缴</th></tr>
+      <tr><th>险种</th><th>个人比例</th><th>单位比例</th><th>基数下限</th><th>基数上限</th><th>个人实缴</th><th>单位实缴</th></tr>
     </thead>
     <tbody>
       ${SI_ITEMS.map(it => {
         const item = pol.items[it.key];
+        if (!item) return '';
         const rate = it.key === 'fund' ? (salaryParams.fundRate ?? item.personal) : item.personal;
+        const erRate = it.key === 'fund' ? (item.employer != null ? item.employer : null) : item.employer;
         return `<tr>
           <td>${it.label}</td>
           <td>${(rate * 100).toFixed(1).replace(/\.0$/, '')}%</td>
+          <td>${fmtRate(erRate)}</td>
           <td>${fmtBound(item.lower)}</td>
           <td>${fmtBound(item.upper)}</td>
-          <td style="color:var(--blue);">¥${formatNum(det[it.key])}</td>
+          <td style="color:var(--blue);">¥${formatNum(det[it.key] || 0)}</td>
+          <td style="color:var(--text2);">¥${formatNum(det.employer[it.key] || 0)}</td>
         </tr>`;
       }).join('')}
-      <tr class="total-row"><td colspan="4">三险一金合计（个人/月）</td><td style="color:var(--blue);">¥${formatNum(det.total)}</td></tr>
+      <tr class="total-row"><td colspan="5">三险一金合计（个人/月）</td><td style="color:var(--blue);">¥${formatNum(det.total)}</td><td></td></tr>
+      <tr class="total-row"><td colspan="5">单位缴纳合计（企业/月）</td><td></td><td style="color:var(--text2);">¥${formatNum(det.employer.total)}</td></tr>
+      ${salaryParams.socialBase > 0 ? `<tr class="total-row"><td colspan="5">企业用工总成本（月薪 ${formatNum(salaryParams.socialBase)} 口径）</td><td colspan="2" style="color:var(--orange);">¥${formatNum(round2(salaryParams.socialBase + det.employer.total))}</td></tr>` : ''}
     </tbody>`;
 }
 
@@ -1519,6 +1870,114 @@ function readSalaryParams() {
   if (extra !== '') salaryParams.extraDeduction = extra;
   renderSalaryItemsTable();
   return ok;
+}
+
+// ==================== 专项附加扣除分项面板 ====================
+
+const EXTRA_ITEM_STANDARDS = {
+  childEducation: '¥2,000/月/孩',
+  infantCare: '¥2,000/月/孩',
+  education: '学历 ¥400/月 · 职业资格 ¥3,600（取得当年）',
+  houseLoan: '¥1,000/月（首套房贷）',
+  houseRent: '¥1,500 / ¥1,100 / ¥800（按城市档）',
+  support: '独生 ¥3,000/月 · 非独生分摊每人 ≤¥1,500',
+  medical: '年度汇算专用'
+};
+
+function onExtraDetailToggle() {
+  const cb = document.getElementById('sp-extra-detail-on');
+  salaryParams.extraDetail.on = !!(cb && cb.checked);
+  const wrap = document.getElementById('sp-extra-detail-wrap');
+  if (wrap) wrap.style.display = salaryParams.extraDetail.on ? '' : 'none';
+  const single = document.getElementById('sp-extra-deduction');
+  if (single) single.disabled = salaryParams.extraDetail.on;
+  renderExtraDetailPanel();
+}
+
+function onExtraItemToggle(key, checked) {
+  salaryParams.extraDetail[key].on = !!checked;
+  // 互斥：住房贷款利息与住房租金不得同时扣除，勾选其一自动取消另一个
+  if (checked && key === 'houseLoan' && salaryParams.extraDetail.houseRent.on) {
+    salaryParams.extraDetail.houseRent.on = false;
+  }
+  if (checked && key === 'houseRent' && salaryParams.extraDetail.houseLoan.on) {
+    salaryParams.extraDetail.houseLoan.on = false;
+  }
+  renderExtraDetailPanel();
+}
+
+function onExtraItemInput(key, field, value) {
+  const d = salaryParams.extraDetail[key];
+  if (!d) return;
+  if (field === 'count') d.count = Math.max(0, Math.floor(Number(value) || 0));
+  else if (field === 'tier') { d.tier = Number(value) || 1500; d.tierUntouched = true; }
+  else if (field === 'share') d.share = Math.max(0, Number(value) || 0);
+  else if (field === 'annual') d.annual = Math.max(0, Number(value) || 0);
+  else if (field === 'kind') d.kind = value === 'cert' ? 'cert' : 'degree';
+  else if (field === 'certMonth') d.certMonth = /^\d{4}-\d{2}$/.test(String(value).trim()) ? String(value).trim() : '';
+  renderExtraDetailPanel();
+}
+
+/** 渲染分项明细行 + 政策校验提示 + 月度合计 */
+function renderExtraDetailPanel() {
+  const wrap = document.getElementById('sp-extra-detail-wrap');
+  if (!wrap) return;
+  const d = salaryParams.extraDetail;
+  const inp = (key, field, value, min, step, width) =>
+    `<input type="number" min="${min}" step="${step}" value="${value == null ? '' : value}"
+      oninput="onExtraItemInput('${key}','${field}',this.value)"
+      style="width:${width || 80}px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;outline:none;">`;
+  const sel = (key, field, options, value) =>
+    `<select onchange="onExtraItemInput('${key}','${field}',this.value)"
+      style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;outline:none;">
+      ${options.map(o => `<option value="${o[0]}" ${String(o[0]) === String(value) ? 'selected' : ''}>${o[1]}</option>`).join('')}
+    </select>`;
+  const row = (key, label, controls, note) => `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--border);">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);min-width:150px;cursor:pointer;">
+        <input type="checkbox" ${d[key].on ? 'checked' : ''} onchange="onExtraItemToggle('${key}',this.checked)"> ${label}
+      </label>
+      <span style="font-size:11px;color:var(--text2);min-width:170px;">${EXTRA_ITEM_STANDARDS[key]}</span>
+      <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);flex:1;min-width:220px;">${controls || ''}
+        ${note ? `<span style="font-size:11px;color:var(--text2);">${note}</span>` : ''}</span>
+    </div>`;
+  const monthInp = (key, field, value) =>
+    `<input type="month" value="${value || ''}" onchange="onExtraItemInput('${key}','${field}',this.value)"
+      style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;outline:none;">`;
+
+  wrap.innerHTML = `
+    ${row('childEducation', '👶 子女教育', `每孩 ${inp('childEducation', 'count', d.childEducation.count, 0, 1)}`)}
+    ${row('infantCare', '🍼 3岁以下婴幼儿照护', `每孩 ${inp('infantCare', 'count', d.infantCare.count, 0, 1)}`)}
+    ${row('education', '📚 继续教育',
+      sel('education', 'kind', [['degree', '学历（学位）继续教育'], ['cert', '职业资格继续教育']], d.education.kind) +
+      (d.education.kind === 'cert' ? ` 取得月份 ${monthInp('education', 'certMonth', d.education.certMonth)}` : ''))}
+    ${row('houseLoan', '🏠 住房贷款利息', '首套房贷，与住房租金互斥（勾选自动取消房租）')}
+    ${row('houseRent', '🏘 住房租金',
+      sel('houseRent', 'tier', [[1500, '1500（直辖市/省会/计划单列市）'], [1100, '1100（市辖区户籍人口＞100万）'], [800, '800（≤100万）']], d.houseRent.tier),
+      '切换参保城市会自动推荐档位')}
+    ${row('support', '👨‍👩‍👧 赡养老人',
+      sel('support', 'mode', [['solo', '独生子女'], ['share', '非独生分摊']], d.support.mode) +
+      (d.support.mode === 'share' ? ` 本人均摊 ${inp('support', 'share', d.support.share, 0, 0.01)} 元/月` : ''))}
+    ${row('medical', '🏥 大病医疗', `年度自付 ${inp('medical', 'annual', d.medical.annual, 0, 0.01, 110)} 元`, '不参与每月预扣，年度汇算清缴时申报')}
+    <div id="sp-extra-messages" style="padding-top:6px;"></div>
+  `;
+  updateExtraDetailHint();
+}
+
+/** 月度合计徽标 + 校验消息 */
+function updateExtraDetailHint() {
+  const hint = document.getElementById('sp-extra-total-hint');
+  const msgEl = document.getElementById('sp-extra-messages');
+  const r = computeExtraDetailFor(salaryParams.extraDetail, '');
+  if (hint) {
+    hint.textContent = salaryParams.extraDetail.on
+      ? `月度合计（除职业资格取证月）¥${formatNum(r.total)}`
+      : '';
+  }
+  if (msgEl) {
+    msgEl.innerHTML = r.messages.map(m =>
+      `<div style="font-size:11px;color:var(--orange);padding:2px 0;">⚠️ ${m}</div>`).join('');
+  }
 }
 
 // ==================== 政策数据管理弹层 ====================
@@ -1605,15 +2064,16 @@ function renderPolicyEditor() {
   document.getElementById('pm-items-wrap').innerHTML = `
     <div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">
       <table class="result-table" style="font-size:12px;">
-        <thead><tr><th>险种</th><th>个人比例（%）</th><th>基数下限</th><th>基数上限</th><th>公积金比例档（%，逗号分隔）</th></tr></thead>
+        <thead><tr><th>险种</th><th>个人比例（%）</th><th>单位比例（%）</th><th>基数下限</th><th>基数上限</th><th>公积金比例档（%，逗号分隔）</th></tr></thead>
         <tbody>
           ${SI_ITEMS.map(it => {
             const item = rec.items[it.key];
-            if (!item) return `<tr><td>${SI_ITEM_LABELS[it.key]}</td><td colspan="4" style="color:var(--text2);">—</td></tr>`;
+            if (!item) return `<tr><td>${SI_ITEM_LABELS[it.key]}</td><td colspan="5" style="color:var(--text2);">—</td></tr>`;
             const isFund = it.key === 'fund';
             return `<tr>
               <td>${it.label}${item.pending ? ' <span style="color:var(--orange);font-size:10px;">待核对</span>' : ''}</td>
               <td>${numInput(window._pmCity, window._pmYear, it.key, 'personal', round2((item.personal || 0) * 100), 0.1, '8')}</td>
+              <td>${numInput(window._pmCity, window._pmYear, it.key, 'employer', item.employer == null ? '' : round2(item.employer * 100), 0.1, isFund ? '同个人档' : '0')}</td>
               <td>${numInput(window._pmCity, window._pmYear, it.key, 'lower', item.lower, 0.01, '不限')}</td>
               <td>${numInput(window._pmCity, window._pmYear, it.key, 'upper', item.upper, 0.01, '不限')}</td>
               <td>${isFund ? `<input class="pm-item-input" value="${(item.rates || []).map(r => round2(r * 100)).join(',')}"
@@ -1623,7 +2083,7 @@ function renderPolicyEditor() {
         </tbody>
       </table>
     </div>
-    <div style="font-size:11px;color:var(--text2);margin-top:6px;">比例与上下限留空表示不限制；修改后立即生效（编辑过的险种会移除「待核对」标记）。</div>`;
+    <div style="font-size:11px;color:var(--text2);margin-top:6px;">比例与上下限留空表示不限制；公积金单位比例留空表示与个人同档；修改后立即生效（编辑过的险种会移除「待核对」标记）。</div>`;
 }
 
 function onPmItemInput(cityKey, yk, itemKey, field, value) {
@@ -1694,10 +2154,11 @@ function pmAddCity() {
         effective: ['2000-01', '2999-12'],
         pending: true,
         items: {
-          pension: siItem(0.08, null, null),
-          medical: siItem(0.02, null, null),
-          unemployment: siItem(0.005, null, null),
-          fund: fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
+          pension:      siItem(0.08, null, null, 0.16),
+          medical:      siItem(0.02, null, null, 0.08),
+          unemployment: siItem(0.005, null, null, 0.005),
+          injury:       siItem(0, null, null, 0.002),
+          fund:         fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
         }
       }
     }
@@ -1748,12 +2209,14 @@ function pmResetToSeed() {
   Object.keys(CITY_POLICY_LIBRARY).forEach(k => delete CITY_POLICY_LIBRARY[k]);
   if (seed) {
     Object.assign(CITY_POLICY_LIBRARY, seed);
+    normalizePolicyLibrary(CITY_POLICY_LIBRARY);
   } else if (!CITY_POLICY_LIBRARY.custom) {
     CITY_POLICY_LIBRARY.custom = {
       name: '自定义',
       years: { custom: { label: '自定义政策', effective: ['2000-01', '2999-12'], pending: true, items: {
-        pension: siItem(0.08, null, null), medical: siItem(0.02, null, null),
-        unemployment: siItem(0.005, null, null), fund: fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
+        pension: siItem(0.08, null, null, 0.16), medical: siItem(0.02, null, null, 0.08),
+        unemployment: siItem(0.005, null, null, 0.005), injury: siItem(0, null, null, 0.002),
+        fund: fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
       } } }
     };
   }
@@ -1784,7 +2247,7 @@ function ensureXLSX(cb) {
 
 /** 政策库 → 扁平行（Excel 维护格式：每行一个 城市×年度×险种） */
 function libraryToRows(lib) {
-  const rows = [['城市key', '城市名称', '年度', '生效起', '生效止', '年度说明', '险种', '个人比例(%)', '基数下限', '基数上限', '公积金比例档(%)逗号分隔', '待核对']];
+  const rows = [['城市key', '城市名称', '年度', '生效起', '生效止', '年度说明', '险种', '个人比例(%)', '单位比例(%)', '基数下限', '基数上限', '公积金比例档(%)逗号分隔', '待核对']];
   Object.entries(lib).forEach(([cityKey, city]) => {
     Object.entries(city.years || {}).forEach(([yk, rec]) => {
       SI_ITEMS.forEach(it => {
@@ -1800,6 +2263,7 @@ function libraryToRows(lib) {
           rec.label || '',
           it.label,
           round2((item.personal || 0) * 100),
+          item.employer == null ? '' : round2(item.employer * 100),
           item.lower == null ? '' : item.lower,
           item.upper == null ? '' : item.upper,
           isFund ? (item.rates || []).map(r => round2(r * 100)).join(',') : '',
@@ -1811,7 +2275,8 @@ function libraryToRows(lib) {
   return rows;
 }
 
-/** 扁平行 → 政策库。返回 { library, errors }；解析失败的行为收集到 errors */
+/** 扁平行 → 政策库。返回 { library, errors }；解析失败的行为收集到 errors。
+ *  兼容新旧两种列布局：新布局含「单位比例(%)」列；旧布局（无该列）导入后单位比例由种子回退补齐。 */
 function rowsToLibrary(rows) {
   const errors = [];
   const lib = {};
@@ -1820,6 +2285,10 @@ function rowsToLibrary(rows) {
     labelToKey[it.label] = it.key;
     labelToKey[it.label.replace('(含生育)', '')] = it.key;
   });
+  const hasEmployerCol = !!(rows && rows[0] && rows[0].some(c => String(c == null ? '' : c).indexOf('单位比例') >= 0));
+  const COL = hasEmployerCol
+    ? { personal: 7, employer: 8, lower: 9, upper: 10, rates: 11, pending: 12 }
+    : { personal: 7, employer: -1, lower: 8, upper: 9, rates: 10, pending: 11 };
   const body = (rows || []).slice(1).filter(r => r && r.some(c => String(c == null ? '' : c).trim() !== ''));
   const num = v => {
     const s = String(v == null ? '' : v).trim();
@@ -1827,6 +2296,8 @@ function rowsToLibrary(rows) {
     const n = parseFloat(s.replace(/,/g, ''));
     return isNaN(n) ? null : n;
   };
+  /* 百分数 → 小数比例：整数换算避免 5.2/100 = 0.052000000000000005 这类浮点漂移 */
+  const pctToRate = n => Math.round(n * 1e6) / 1e8;
   body.forEach((r, idx) => {
     const lineNo = idx + 2;
     const cityKey = String(r[0] == null ? '' : r[0]).trim();
@@ -1840,32 +2311,38 @@ function rowsToLibrary(rows) {
       errors.push(`第${lineNo}行：城市key/年度缺失或险种无法识别（${r[6]}）`);
       return;
     }
-    const personalPct = num(r[7]);
-    const personal = personalPct == null ? null : personalPct / 100;
-    const lower = num(r[8]);
-    const upper = num(r[9]);
+    const personalPct = num(r[COL.personal]);
+    const personal = personalPct == null ? null : pctToRate(personalPct);
+    const employerPct = COL.employer >= 0 ? num(r[COL.employer]) : null;
+    const employer = employerPct == null ? null : pctToRate(employerPct);
+    const lower = num(r[COL.lower]);
+    const upper = num(r[COL.upper]);
     const city = lib[cityKey] || (lib[cityKey] = { name: cityName || cityKey, years: {} });
     const rec = city.years[yk] || (city.years[yk] = {
       label: label || yk,
       effective: [effStart || '2000-01', effEnd || '2999-12'],
-      pending: String(r[11] == null ? '' : r[11]).trim() === '是',
+      pending: String(r[COL.pending] == null ? '' : r[COL.pending]).trim() === '是',
       items: {}
     });
     if (label) rec.label = label;
     if (/^\d{4}-\d{2}$/.test(effStart)) rec.effective[0] = effStart;
     if (/^\d{4}-\d{2}$/.test(effEnd)) rec.effective[1] = effEnd;
     if (itemKey === 'fund') {
-      const rates = String(r[10] == null ? '' : r[10]).split(/[,，]/).map(s => parseFloat(s) / 100).filter(n => !isNaN(n) && n > 0);
-      rec.items.fund = { personal: personal == null ? 0.05 : personal, rates: rates.length ? rates : FUND_RATES_STD.slice(), lower: lower, upper: upper };
+      const rates = String(r[COL.rates] == null ? '' : r[COL.rates]).split(/[,，]/).map(s => pctToRate(parseFloat(s))).filter(n => !isNaN(n) && n > 0);
+      const f = { personal: personal == null ? 0.05 : personal, rates: rates.length ? rates : FUND_RATES_STD.slice(), lower: lower, upper: upper };
+      if (employer != null) f.employer = employer;
+      rec.items.fund = f;
     } else {
-      rec.items[itemKey] = { personal: personal == null ? 0 : personal, lower: lower, upper: upper };
+      const it = { personal: personal == null ? 0 : personal, lower: lower, upper: upper };
+      if (employer != null) it.employer = employer;
+      rec.items[itemKey] = it;
     }
   });
   if (Object.keys(lib).length === 0) errors.push('未解析到任何有效数据行');
   return { library: lib, errors: errors };
 }
 
-/** 导入覆盖公共入口：替换库内容、兜底自定义、刷新联动 UI */
+/** 导入覆盖公共入口：替换库内容、兜底自定义、规范化（旧数据从种子回退补单位比例/工伤）、刷新联动 UI */
 function applyImportedLibrary(lib, errors) {
   Object.keys(CITY_POLICY_LIBRARY).forEach(k => delete CITY_POLICY_LIBRARY[k]);
   Object.assign(CITY_POLICY_LIBRARY, lib);
@@ -1873,11 +2350,13 @@ function applyImportedLibrary(lib, errors) {
     CITY_POLICY_LIBRARY.custom = {
       name: '自定义',
       years: { custom: { label: '自定义政策', effective: ['2000-01', '2999-12'], pending: true, items: {
-        pension: siItem(0.08, null, null), medical: siItem(0.02, null, null),
-        unemployment: siItem(0.005, null, null), fund: fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
+        pension: siItem(0.08, null, null, 0.16), medical: siItem(0.02, null, null, 0.08),
+        unemployment: siItem(0.005, null, null, 0.005), injury: siItem(0, null, null, 0.002),
+        fund: fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
       } } }
     };
   }
+  normalizePolicyLibrary(CITY_POLICY_LIBRARY);
   if (!CITY_POLICY_LIBRARY[salaryParams.cityId]) salaryParams.cityId = 'custom';
   window._pmCity = Object.keys(CITY_POLICY_LIBRARY)[0];
   _policyCache.clear();
@@ -1892,7 +2371,7 @@ function pmExportExcel() {
   ensureXLSX(() => {
     const rows = libraryToRows(CITY_POLICY_LIBRARY);
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 11 }, { wch: 11 }, { wch: 30 }, { wch: 13 }, { wch: 11 }, { wch: 10 }, { wch: 10 }, { wch: 22 }, { wch: 8 }];
+    ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 11 }, { wch: 11 }, { wch: 30 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 10 }, { wch: 10 }, { wch: 22 }, { wch: 8 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '政策库');
     XLSX.writeFile(wb, '城市社保公积金政策库.xlsx');
@@ -1983,6 +2462,13 @@ function buildMonthGrid() {
   const yearInput = document.getElementById('multi-year');
   if (yearInput && !yearInput.value) yearInput.value = new Date().getFullYear();
 
+  // 年终奖发放月份下拉（默认 12 月）
+  const bonusSel = document.getElementById('multi-bonus-month');
+  if (bonusSel && !bonusSel.options.length) {
+    bonusSel.innerHTML = MONTH_NAMES.map((label, i) =>
+      `<option value="${i + 1}" ${i === 11 ? 'selected' : ''}>${label}</option>`).join('');
+  }
+
   const grid = document.getElementById('month-grid');
   grid.innerHTML = '';
   for (let m = 1; m <= 12; m++) {
@@ -2030,6 +2516,85 @@ function updateMultiInputHints() {
   }
 }
 
+/* 年终奖计税方案选择：'auto' 跟随推荐 | 'separate' 单独计税 | 'combined' 并入综合所得 */
+var multiBonusStrategy = 'auto';
+function setMultiBonusStrategy(s) {
+  multiBonusStrategy = s;
+  calcMulti();
+}
+
+/** 读取多月累计页签的年终奖输入（金额 ≤0 或未填返回 null） */
+function readMultiBonus() {
+  const amount = round2(Math.max(0, parseFloat(document.getElementById('multi-bonus-amount')?.value) || 0));
+  if (!(amount > 0)) return null;
+  const sel = document.getElementById('multi-bonus-month');
+  const m = sel ? (parseInt(sel.value) || 12) : 12;
+  const year = parseInt(document.getElementById('multi-year')?.value) || new Date().getFullYear();
+  return { amount: amount, month: year + '-' + String(m).padStart(2, '0') };
+}
+
+/** 构造「年终奖单独计税」行：不进入累计链，独立按 ÷12 档计税 */
+function buildBonusSeparateRow(bonus, results) {
+  const bkt = getMonthlyBracket(bonus.amount);
+  const tax = calcBonusTaxSeparate(bonus.amount);
+  let cumIncome = 0, cumDeduction = 0, cumTaxDue = 0;
+  results.forEach(r => {
+    if ((r.month || '') <= bonus.month && !r._isBonus) {
+      cumIncome = r.cumIncome; cumDeduction = r.cumDeduction; cumTaxDue = r.cumTaxDue;
+    }
+  });
+  return {
+    month: bonus.month, note: '年终奖', amount: bonus.amount,
+    preTax: bonus.amount, withholdingIncome: 0,
+    cumIncome: cumIncome, cumDeduction: cumDeduction, taxableIncome: 0,
+    rate: bkt.rate, quick: bkt.quick,
+    cumTaxDue: round2(cumTaxDue + tax), currentTax: tax,
+    postTax: round2(bonus.amount - tax),
+    effectiveRate: bonus.amount > 0 ? tax / bonus.amount : 0,
+    socialInsurance: 0, extraDeduction: 0,
+    _isBonus: true, _bonusSeparate: true, _siDetail: null
+  };
+}
+
+/** 按月份序把年终奖行插入结果序列（排在发放月工资行之后） */
+function insertBonusRowSorted(results, row) {
+  let idx = 0;
+  for (let i = 0; i < results.length; i++) {
+    if ((results[i].month || '') <= row.month) idx = i + 1;
+  }
+  results.splice(idx, 0, row);
+}
+
+/** HTML 属性/文本转义，防标签、引号等特殊字符破坏结构 */
+function escAttr(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/**
+ * 备注列内容：行名一行；政策标签「城市 · 年度（明细…）」拆成主行 + 明细行，
+ * 明细默认单行省略，点击展开/收起，悬浮 title 看全文，避免长方案名把行撑高
+ */
+function buildNoteCellHTML(r, isSalary) {
+  let html = `<div class="note-name">${escAttr(r.note)}</div>`;
+  if (isSalary && r._policyLabel) {
+    const label = String(r._policyLabel);
+    const m = label.match(/^([^（(]+)[（(]([\s\S]+)[）)]\s*$/);
+    const main = m ? m[1] : label;
+    const detail = m ? m[2] : '';
+    const fallback = r._yearFallback ? '（年度未精确匹配）' : '';
+    html += `<div class="note-policy"${(detail || fallback) ? ` title="${escAttr(label + fallback)}"` : ''}>` +
+      `<span class="note-policy-main">${escAttr(main)}${fallback}</span>` +
+      (detail ? `<span class="note-policy-detail" title="点击展开/收起" onclick="toggleNoteDetail(this)">${escAttr(detail)}</span>` : '') +
+      `</div>`;
+  }
+  if (r._isBonus) {
+    html += `<div style="font-size:11px;color:var(--accent2);margin-top:2px;">${r._bonusSeparate ? '单独计税（÷12 定档）' : '并入综合所得'}</div>`;
+  }
+  return html;
+}
+
+function toggleNoteDetail(el) { el.classList.toggle('expanded'); }
+
 function calcMulti() {
   const yearInput = document.getElementById('multi-year');
   const year = parseInt(yearInput.value) || new Date().getFullYear();
@@ -2055,18 +2620,49 @@ function calcMulti() {
   let cumIncome = 0;
   let cumTax = 0;
   let cumDeduction = 0;
+  let cumSI = 0;      // 累计三险一金（展示与公式导出用）
+  let cumExtra = 0;   // 累计专项附加（展示与公式导出用）
   const results = [];
   let lastMonth = '';
 
   const isSalary = incomeType === 'salary';
-  const salaryExtra = isSalary ? Math.max(0, Number(salaryParams.extraDeduction) || 0) : 0;
+  const bonus = isSalary ? readMultiBonus() : null;
+  let plan = null;
 
-  data.forEach(d => {
+  /* 工资薪金：先备好逐月 si/extra，供年终奖两方案对比与逐行计算复用 */
+  let entries = data;
+  if (isSalary) {
+    entries = data.map(d => {
+      const siD = computeSocialInsuranceFor(salaryParams.cityId, d.month, salaryParams.socialBase, salaryParams.fundBase);
+      const ex = getExtraDeductionFor(d.month);
+      return { month: d.month, amount: d.amount, note: d.note, si: siD.total, extra: ex.total, _siDetail: siD, _extraMsgs: ex.messages, _medicalAnnual: ex.medicalAnnual };
+    });
+    if (bonus && multiDirection === 'forward') {
+      plan = compareBonusStrategies(entries, bonus);
+      plan.chosen = multiBonusStrategy === 'auto' ? plan.recommendation : multiBonusStrategy;
+    } else if (bonus) {
+      /* 反算方向：并入对比不适用，年终奖按单独计税独立成行 */
+      plan = {
+        bonus: bonus.amount, bonusMonth: bonus.month,
+        separateTax: calcBonusTaxSeparate(bonus.amount),
+        trap: findBonusTrapZone(bonus.amount),
+        reverseOnly: true, chosen: 'separate'
+      };
+    }
+    if (plan && plan.chosen === 'combined') {
+      entries = mergeBonusIntoEntries(entries, bonus);
+      entries.forEach(e => { if (e.isBonus) e.note = '年终奖'; });
+    }
+  }
+  window._multiBonusPlan = plan;
+
+  (entries).forEach(d => {
     if (isSalary) {
       /* 工资薪金：始终累计预扣；逐月匹配城市政策；每月减除 = 5000 + 三险一金 + 专项附加（同月只计一次） */
+      const isBonusRow = !!d.isBonus;
+      const salarySI = isBonusRow ? 0 : d.si;
+      const salaryExtra = isBonusRow ? 0 : d.extra;
       const pol = resolvePolicyMemo(salaryParams.cityId, d.month);
-      const siD = computeSocialInsuranceFor(salaryParams.cityId, d.month, salaryParams.socialBase, salaryParams.fundBase);
-      const salarySI = siD.total;
       if (d.month !== lastMonth) {
         lastMonth = d.month;
         cumDeduction += 5000 + salarySI + salaryExtra;
@@ -2079,6 +2675,10 @@ function calcMulti() {
 
       cumIncome = r.cumIncome;
       cumTax = r.cumTaxDue;
+      if (!isBonusRow) {
+        cumSI = round2(cumSI + salarySI);
+        cumExtra = round2(cumExtra + salaryExtra);
+      }
 
       results.push({
         ...d,
@@ -2087,7 +2687,13 @@ function calcMulti() {
         _isOldPolicy: false,
         _policyLabel: pol.label,
         _yearFallback: !pol.matched,
-        _siDetail: siD
+        _siDetail: isBonusRow ? null : d._siDetail,
+        _isBonus: isBonusRow,
+        _bonusSeparate: false,
+        _cumSI: cumSI,
+        _cumExtra: cumExtra,
+        _extraMsgs: isBonusRow ? [] : (d._extraMsgs || []),
+        _medicalAnnual: isBonusRow ? 0 : (d._medicalAnnual || 0)
       });
     } else if (isNewPolicy(d.month)) {
       // 新政策：累计预扣
@@ -2148,7 +2754,12 @@ function calcMulti() {
     }
   });
 
-  renderMultiResults(results);
+  /* 年终奖单独计税（含反算方向）：独立成行插入发放月 */
+  if (bonus && plan && plan.chosen === 'separate') {
+    insertBonusRowSorted(results, buildBonusSeparateRow(bonus, results));
+  }
+
+  renderMultiResults(results, plan);
 }
 
 function resetMulti() {
@@ -2159,10 +2770,13 @@ function resetMulti() {
       input.parentElement.classList.remove('has-data');
     }
   }
+  const bonusInput = document.getElementById('multi-bonus-amount');
+  if (bonusInput) bonusInput.value = '';
+  multiBonusStrategy = 'auto';
   document.getElementById('multi-result').style.display = 'none';
 }
 
-function renderMultiResults(results) {
+function renderMultiResults(results, plan) {
   const container = document.getElementById('multi-result');
   container.style.display = '';
 
@@ -2172,6 +2786,7 @@ function renderMultiResults(results) {
   const totalPost = results.reduce((s, r) => s + r.postTax, 0);
   const totalSI = results.reduce((s, r) => s + (r.socialInsurance || 0), 0);
   const totalExtra = results.reduce((s, r) => s + (r.extraDeduction || 0), 0);
+  const totalEmployer = results.reduce((s, r) => s + (r._siDetail && r._siDetail.employer ? r._siDetail.employer.total : 0), 0);
   const avgRate = totalPre > 0 ? totalTax / totalPre : 0;
   const multiDirLabel = isSalary
     ? (multiDirection === 'forward' ? '应发工资 → 实发工资' : '实发工资 → 应发工资')
@@ -2182,7 +2797,54 @@ function renderMultiResults(results) {
   const outLabel = isSalary
     ? (multiDirection === 'forward' ? '实发工资' : '应发工资（反算）')
     : (multiDirection === 'forward' ? '税后收入' : '税前收入（反算）');
-  const colCount = isSalary ? 12 : 11;
+  const colCount = isSalary ? 13 : 11;
+
+  /* 专项附加政策提示（分项模式），全年只提示一次 */
+  const extraMsgs = [];
+  results.forEach(r => (r._extraMsgs || []).forEach(m => { if (!extraMsgs.includes(m)) extraMsgs.push(m); }));
+  const medicalAnnual = results.reduce((s, r) => Math.max(s, r._medicalAnnual || 0), 0);
+
+  /* 年终奖方案对比卡 */
+  let bonusCard = '';
+  if (isSalary && plan) {
+    const recLabel = { separate: '单独计税', combined: '并入综合所得' };
+    if (plan.reverseOnly) {
+      bonusCard = `
+      <div class="result-card" style="margin-bottom:16px;">
+        <div class="result-header"><span>🎁 年终奖计税（${plan.bonusMonth} · 奖金 ¥${formatNum(plan.bonus)}）</span></div>
+        <div style="padding:10px 4px;font-size:13px;">
+          反算方向下并入对比不适用，年终奖按<strong>单独计税</strong>处理：应纳个税 <strong style="color:var(--red);">¥${formatNum(plan.separateTax)}</strong>（÷12 定档，每年限一次）。
+          如需对比「并入综合所得」，请切换到「税前 → 税后」方向重新计算。
+        </div>
+      </div>`;
+    } else {
+      const recBadge = `<span style="background:var(--green);color:#fff;font-size:11px;padding:2px 10px;border-radius:12px;font-weight:700;">✅ 推荐：${recLabel[plan.recommendation]}${plan.saving > 0 ? ` · 节税 ¥${formatNum(plan.saving)}` : ''}</span>`;
+      const btn = (s, label) => `<button class="btn ${plan.chosen === s ? 'btn-green' : 'btn-secondary'}" style="padding:4px 12px;font-size:12px;" onclick="setMultiBonusStrategy('${s}')">${label}</button>`;
+      bonusCard = `
+      <div class="result-card" style="margin-bottom:16px;">
+        <div class="result-header"><span>🎁 年终奖方案对比（${plan.bonusMonth} · 奖金 ¥${formatNum(plan.bonus)}）</span><span>${recBadge}</span></div>
+        <div style="overflow-x:auto;">
+          <table class="result-table" style="font-size:13px;">
+            <thead><tr><th>方案</th><th>年终奖应纳个税</th><th>全年个税合计</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr style="${plan.chosen === 'separate' ? 'background:rgba(0,184,148,0.08);' : ''}">
+                <td>单独计税</td><td class="tax-col">¥${formatNum(plan.separateTax)}</td><td>¥${formatNum(plan.separateTotalTax)}</td>
+                <td style="color:var(--text2);">奖金 ÷12 定档，不并入累计，不享受减除费用；每年限一次</td>
+              </tr>
+              <tr style="${plan.chosen === 'combined' ? 'background:rgba(0,184,148,0.08);' : ''}">
+                <td>并入综合所得</td><td class="tax-col">¥${formatNum(plan.combinedBonusTax)}（税负增量）</td><td>¥${formatNum(plan.combinedTotalTax)}</td>
+                <td style="color:var(--text2);">奖金计入发放月累计收入，正常享受减除</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 4px 2px;font-size:12px;color:var(--text2);">
+          <span>应用方案：</span>${btn('auto', '跟随推荐')}${btn('separate', '单独计税')}${btn('combined', '并入综合所得')}
+        </div>
+        ${plan.trap ? `<div style="padding:6px 4px 2px;font-size:12px;color:var(--orange);">⚠️ 无效区间避坑：奖金 ¥${formatNum(plan.trap.from)} ~ ¥${formatNum(plan.trap.to)} 区间内多发反而到手更少，建议调整为 ¥${formatNum(plan.trap.suggest)}。</div>` : ''}
+      </div>`;
+    }
+  }
 
   // 按年分组
   const yearGroups = {};
@@ -2200,7 +2862,7 @@ function renderMultiResults(results) {
     const yRows = yearGroups[yr];
     // 跨年分隔
     if (yi > 0) {
-      tbodyHTML += `<tr style="background:rgba(108,92,231,0.12);"><td colspan="${colCount}" style="text-align:center;padding:10px;font-weight:700;color:var(--accent2);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`;
+      tbodyHTML += `<tr style="background:rgba(108,92,231,0.12);"><td colspan="${colCount}" class="span-row" style="text-align:center;padding:10px;font-weight:700;color:var(--accent2);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`;
     }
     // 年度小计变量
     let yPre = 0, yTax = 0, yPost = 0;
@@ -2208,36 +2870,42 @@ function renderMultiResults(results) {
       seq++;
       // 断月标记
       if (r._isGap) {
-        tbodyHTML += `<tr style="background:rgba(253,114,114,0.1);"><td colspan="${colCount}" style="text-align:center;padding:8px;font-weight:600;color:var(--red);font-size:12px;">⚠️ 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`;
+        tbodyHTML += `<tr style="background:rgba(253,114,114,0.1);"><td colspan="${colCount}" class="span-row" style="text-align:center;padding:8px;font-weight:600;color:var(--red);font-size:12px;">⚠️ 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`;
       }
       // 旧政策标记
       if (r._isOldPolicy) {
-        tbodyHTML += `<tr style="background:rgba(253,203,110,0.1);"><td colspan="${colCount}" style="text-align:center;padding:8px;font-weight:600;color:var(--orange);font-size:12px;">📅 旧政策：${r.month} 按生产经营所得计算，不扣税（2025年10月1日前）</td></tr>`;
+        tbodyHTML += `<tr style="background:rgba(253,203,110,0.1);"><td colspan="${colCount}" class="span-row" style="text-align:center;padding:8px;font-weight:600;color:var(--orange);font-size:12px;">📅 旧政策：${r.month} 按生产经营所得计算，不扣税（2025年10月1日前）</td></tr>`;
       }
+      const isBonusRow = !!r._isBonus;
+      const erTitle = r._siDetail && r._siDetail.employer
+        ? ` title="单位养老 ¥${formatNum(r._siDetail.employer.pension)} / 医疗 ¥${formatNum(r._siDetail.employer.medical)} / 失业 ¥${formatNum(r._siDetail.employer.unemployment)} / 工伤 ¥${formatNum(r._siDetail.employer.injury)} / 公积金 ¥${formatNum(r._siDetail.employer.fund)}"`
+        : '';
       tbodyHTML += `
-        <tr>
+        <tr${isBonusRow ? ' class="bonus-row"' : ''}>
           <td>${r.month}</td>
-          <td class="label-col">${r.note}${isSalary && r._policyLabel ? `<div style="font-size:11px;color:var(--text2);margin-top:2px;">${r._policyLabel}${r._yearFallback ? '（年度未匹配）' : ''}</div>` : ''}</td>
+          <td class="label-col">${buildNoteCellHTML(r, isSalary)}</td>
           <td>¥${formatNum(multiDirection === 'forward' ? r.preTax : r.postTax)}</td>
           ${isSalary
-            ? `<td${r._siDetail ? ` title="养老 ¥${formatNum(r._siDetail.pension)} / 医疗 ¥${formatNum(r._siDetail.medical)} / 失业 ¥${formatNum(r._siDetail.unemployment)} / 公积金 ¥${formatNum(r._siDetail.fund)}"` : ''}>¥${formatNum(r.socialInsurance)}</td><td>¥${formatNum(r.extraDeduction)}</td>`
+            ? `<td${r._siDetail ? ` title="养老 ¥${formatNum(r._siDetail.pension)} / 医疗 ¥${formatNum(r._siDetail.medical)} / 失业 ¥${formatNum(r._siDetail.unemployment)} / 公积金 ¥${formatNum(r._siDetail.fund)}"` : ''}>¥${formatNum(r.socialInsurance)}</td>
+               <td${erTitle}>¥${formatNum(r._siDetail && r._siDetail.employer ? r._siDetail.employer.total : 0)}</td>
+               <td>¥${formatNum(r.extraDeduction)}</td>`
             : `<td>¥${formatNum(r.withholdingIncome)}</td>`}
-          <td>¥${formatNum(r.cumIncome)}</td>
-          <td>¥${formatNum(r.cumDeduction)}</td>
-          <td>¥${formatNum(r.taxableIncome)}</td>
-          <td>${(r.rate * 100)}%<div style="font-size:10px;color:var(--text2);">速算 ${formatNum(r.quick)}</div></td>
+          <td>${isSalary && isBonusRow && r._bonusSeparate ? '—' : `¥${formatNum(r.cumIncome)}`}</td>
+          <td>${isSalary && isBonusRow && r._bonusSeparate ? '—' : `¥${formatNum(r.cumDeduction)}`}</td>
+          <td>${isSalary && isBonusRow && r._bonusSeparate ? '—' : `¥${formatNum(r.taxableIncome)}`}</td>
+          <td>${(r.rate * 100)}%<div style="font-size:10px;color:var(--text2);white-space:nowrap;">速算 ${formatNum(r.quick)}${isSalary && isBonusRow ? '（÷12）' : ''}</div></td>
           <td class="tax-col">¥${formatNum(r.currentTax)}</td>
           <td class="highlight">¥${formatNum(multiDirection === 'forward' ? r.postTax : r.preTax)}</td>
-          <td>${isSalary ? '累计预扣' : (r._isOldPolicy ? '旧政策' : '新政策')}</td>
+          <td>${isSalary ? (isBonusRow ? '年终奖' : '累计预扣') : (r._isOldPolicy ? '旧政策' : '新政策')}</td>
         </tr>`;
       yPre += r.preTax; yTax += r.currentTax; yPost += r.postTax;
     });
     // 年度小计
     if (years.length > 1) {
-      tbodyHTML += `<tr style="background:var(--surface2);font-weight:600;">
+      tbodyHTML += `<tr class="subtotal-row">
         <td colspan="2" style="text-align:right;color:var(--text2);">${yr} 年小计</td>
         <td>¥${formatNum(multiDirection === 'forward' ? yPre : yPost)}</td>
-        ${isSalary ? '<td></td><td></td>' : '<td></td>'}
+        ${isSalary ? '<td></td><td></td><td></td>' : '<td></td>'}
         <td></td><td></td><td></td><td></td>
         <td class="tax-col">¥${formatNum(yTax)}</td>
         <td class="highlight">¥${formatNum(multiDirection === 'forward' ? yPost : yPre)}</td>
@@ -2264,24 +2932,38 @@ function renderMultiResults(results) {
         <div class="label">平均税负率</div>
         <div class="value orange">${(avgRate * 100).toFixed(2)}%</div>
       </div>
+      ${isSalary ? `
+      <div class="summary-item">
+        <div class="label">单位社保公积金</div>
+        <div class="value" style="color:var(--text2);">¥${formatNum(totalEmployer)}</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">企业用工总成本</div>
+        <div class="value orange">¥${formatNum(round2(totalPre + totalEmployer))}</div>
+      </div>` : ''}
     </div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
       <span style="background:var(--accent);color:#fff;font-size:12px;padding:5px 14px;border-radius:20px;font-weight:700;">📊 ${multiDirLabel}</span>
       <span style="color:var(--text2);font-size:13px;">计算模式</span>
     </div>
-    <div class="result-card">
+    ${bonusCard}
+    ${(extraMsgs.length || medicalAnnual > 0) ? `<div class="info-box" style="margin-bottom:16px;">${extraMsgs.map(m => `<div style="font-size:12px;color:var(--orange);padding:2px 0;">⚠️ ${m}</div>`).join('')}${medicalAnnual > 0 ? `<div style="font-size:12px;color:var(--text2);padding:2px 0;">💡 年度汇算提示：大病医疗可扣除金额约 ¥${formatNum(Math.max(0, Math.min(medicalAnnual - 15000, 80000)))}（自付超 15,000 元部分，限额 80,000 元），请在次年 3~6 月汇算清缴时申报。</div>` : ''}</div>` : ''}
+    <div class="result-card card-wide">
       <div class="result-header">
         <span>逐月明细</span>
-        <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" onclick="exportMultiCSV()">📥 导出 CSV</button>
+        <span style="display:flex;gap:8px;">
+          ${isSalary ? `<button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" onclick="exportMultiExcelFormula()">📊 导出 Excel（公式明细）</button>` : ''}
+          <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" onclick="exportMultiCSV()">📥 导出 CSV</button>
+        </span>
       </div>
       <div style="overflow-x:auto;">
-        <table class="result-table">
+        <table class="result-table detail-table${isSalary ? ' salary' : ''}">
           <thead>
             <tr>
               <th>月份</th>
               <th>备注</th>
               <th>${inLabel}</th>
-              ${isSalary ? '<th>三险一金(个人)</th><th>专项附加</th>' : '<th>本次预扣收入额</th>'}
+              ${isSalary ? '<th>三险一金(个人)</th><th>单位社保公积金</th><th>专项附加</th>' : '<th>本次预扣收入额</th>'}
               <th>累计发放金额</th>
               <th>累计减除费用</th>
               <th>累计应纳税所得额</th>
@@ -2297,7 +2979,7 @@ function renderMultiResults(results) {
               <td colspan="2">合计</td>
               <td>¥${formatNum(multiDirection === 'forward' ? totalPre : totalPost)}</td>
               ${isSalary
-                ? `<td>¥${formatNum(totalSI)}</td><td>¥${formatNum(totalExtra)}</td>`
+                ? `<td>¥${formatNum(totalSI)}</td><td>¥${formatNum(totalEmployer)}</td><td>¥${formatNum(totalExtra)}</td>`
                 : `<td>¥${formatNum(results.reduce((s,r) => s + r.withholdingIncome, 0))}</td>`}
               <td></td>
               <td>¥${formatNum(results.reduce((s,r) => s + (r.cumDeduction || 0), 0))}</td>
@@ -2329,9 +3011,9 @@ function exportMultiCSV() {
     : (multiDirection === 'forward' ? '税后收入' : '税前收入（反算）');
   let header, rows;
   if (isSalary) {
-    header = `月份,备注,${preLabel},三险一金(个人),专项附加扣除,累计发放金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},计税方式\n`;
+    header = `月份,备注,${preLabel},三险一金(个人),单位社保公积金,专项附加扣除,累计发放金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},计税方式\n`;
     rows = results.map(r =>
-      `${r.month},${r.note},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.socialInsurance || 0)},${round2(r.extraDeduction || 0)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},累计预扣`
+      `${r.month},${r.note}${r._isBonus ? (r._bonusSeparate ? '(单独计税)' : '(并入综合所得)') : ''},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.socialInsurance || 0)},${round2(r._siDetail && r._siDetail.employer ? r._siDetail.employer.total : 0)},${round2(r.extraDeduction || 0)},${r._isBonus && r._bonusSeparate ? '' : round2(r.cumIncome)},${r._isBonus && r._bonusSeparate ? '' : round2(r.cumDeduction || 0)},${r._isBonus && r._bonusSeparate ? '' : round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},${r._isBonus ? '年终奖' : '累计预扣'}`
     ).join('\n');
   } else {
     header = `月份,备注,${preLabel},本次预扣收入额,累计发放金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},政策类型\n`;
@@ -3097,6 +3779,14 @@ const COL_KEYWORDS = [
     exclude: /基数/i
   },
   {
+    type: 'bonus',
+    patterns: [
+      /^(年终奖|年终奖金|全年一次性奖金|年度奖金|年终奖励|年终花红|bonus|annual\s*bonus)$/i,
+      /年终奖|年度奖金|一次性奖金|年终花红/i
+    ],
+    exclude: /工资|月薪|基数|比例|月度|季度|绩效/i
+  },
+  {
     type: 'extraDeduction',
     patterns: [
       /^(专项附加扣除|专项附加|附加扣除)$/i,
@@ -3162,6 +3852,7 @@ const COL_TYPE_LABELS = {
   socialBase:     '🧮 社保基数',
   fundBase:       '🏠 公积金基数',
   fundRate:       '📊 公积金比例',
+  bonus:          '🎁 年终奖',
   extraDeduction: '➕ 专项附加扣除',
   city:           '🏙️ 城市',
   idCard:    '🪪 身份证',
@@ -3626,7 +4317,7 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
     rows.forEach(row => {
       if (isSummaryLikeRow(row)) return;
       let month = '', amount = 0, name = '默认', idCard = '', phone = '', bankCard = '';
-      let socialBase = '', fundBase = '', fundRate = '', extraDeduction = '';
+      let socialBase = '', fundBase = '', fundRate = '', extraDeduction = '', bonus = '';
       let city = '';
       const monthHint = row._sheetMonthHint || '';
 
@@ -3648,6 +4339,7 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
       if (rowColMap.fundBase != null) fundBase = readAmt(rowColMap.fundBase);
       if (rowColMap.fundRate != null) fundRate = parseFundRate(row[rowColMap.fundRate]);
       if (rowColMap.extraDeduction != null) extraDeduction = readAmt(rowColMap.extraDeduction);
+      if (rowColMap.bonus != null) bonus = readAmt(rowColMap.bonus);
       if (rowColMap.city != null) city = String(row[rowColMap.city] == null ? '' : row[rowColMap.city]).trim();
       if ((!month || month === '-') && monthHint) month = monthHint;
       name = sanitizeName(name) || '默认';
@@ -3685,6 +4377,7 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
           fundBase,
           fundRate,
           extraDeduction,
+          bonus,
           city,
           person: name,
           idCard,
@@ -4132,6 +4825,254 @@ function showBatchPreview(parsed, personKeys, personsMap, filename) {
   });
 }
 
+/* ==================== 批量·工资薪金单人计税流水线 ==================== */
+
+/** 年终奖合成记录：金额取「年终奖」列，不参与三险一金与专项附加 */
+function makeBatchBonusSynthRec(b) {
+  return {
+    ...b,
+    amount: round2(Number(b.bonus) || 0),
+    socialBase: '', fundBase: '', fundRate: '', extraDeduction: '',
+    _isBonus: true
+  };
+}
+
+/**
+ * 单人工资薪金计税流水线（可重复执行以支持年终奖方案对比）
+ * @param {object} group 人员分组
+ * @param {Array} records 工资记录（月份升序）
+ * @param {Array} bonusRecs 需「并入综合所得」的年终奖记录（作为收入插入发放月）
+ */
+function runBatchSalaryPass(group, records, bonusRecs) {
+  const rows = [];
+
+  /* 年终奖合成记录：排在发放月最后一笔工资之后；当月无工资记录时插到月序合适处 */
+  let merged;
+  if (bonusRecs && bonusRecs.length) {
+    merged = [];
+    for (let i = 0; i < records.length; i++) {
+      merged.push(records[i]);
+      const next = records[i + 1];
+      if (!next || next.month !== records[i].month) {
+        bonusRecs.filter(b => b.month === records[i].month)
+          .forEach(b => merged.push(makeBatchBonusSynthRec(b)));
+      }
+    }
+    bonusRecs.filter(b => !records.some(r => r.month === b.month)).forEach(b => {
+      let idx = 0;
+      merged.forEach((r, i) => { if (!r._isBonus && (r.month || '') <= b.month) idx = i + 1; });
+      merged.splice(idx, 0, makeBatchBonusSynthRec(b));
+    });
+  } else {
+    merged = records.slice();
+  }
+
+  let cumIncome = 0, cumTax = 0, cumDeduction = 0;
+  let cumSI = 0, cumExtra = 0;
+  let lastMonth = '', lastYear = '';
+
+  merged.forEach(d => {
+    const curYear = d.month && d.month !== '-' ? d.month.split('-')[0] : '';
+    if (curYear && curYear !== lastYear) {
+      if (lastYear !== '') {
+        cumIncome = 0;
+        cumTax = 0;
+        cumDeduction = 0;
+        lastMonth = '';
+      }
+      lastYear = curYear;
+    }
+
+    /* 城市适用链：行内城市 > 整批城市 > 工资参数城市；未知城市回退并标注 */
+    const rowCityKey = d.city ? findCityKey(d.city) : null;
+    const cityUnknown = !!d.city && !rowCityKey;
+    const cityKey = rowCityKey || batchCityId || salaryParams.cityId;
+    const pol = resolvePolicyMemo(cityKey, d.month);
+    /* 公积金比例：行内「公积金比例」列 > 「工资参数」全局档位 */
+    const effFundRate = (d.fundRate !== '' && d.fundRate != null) ? Number(d.fundRate) : salaryParams.fundRate;
+
+    /* 三险一金：年终奖行不缴社保；工资行按 行内基数×城市政策 > 全局基数 > 按应发工资作基数（勾选时）> 0 并标注 */
+    let si;
+    let siD = null;
+    if (d._isBonus) {
+      si = 0;
+    } else {
+      const hasRowBase = d.socialBase !== '' && d.socialBase != null && d.socialBase > 0;
+      if (hasRowBase) {
+        const fund = (d.fundBase !== '' && d.fundBase != null) ? d.fundBase : d.socialBase;
+        siD = computeSocialInsuranceDetail(d.socialBase, fund, pol.items, effFundRate);
+        si = siD.total;
+      } else if (salaryParams.socialBase > 0) {
+        siD = computeSocialInsuranceDetail(salaryParams.socialBase, salaryParams.fundBase, pol.items, effFundRate);
+        si = siD.total;
+      } else if (batchGrossAsBase) {
+        siD = computeSocialInsuranceDetail(d.amount, '', pol.items, effFundRate);
+        si = siD.total;
+      } else {
+        si = 0;
+      }
+    }
+    si = round2(Math.max(0, Number(si) || 0));
+    const siMissing = !d._isBonus && !siD;
+
+    /* 专项附加：行内总额优先 > 全局分项明细（按月，含职业资格取证月）> 全局单一总额 */
+    const extra = d._isBonus ? 0
+      : ((d.extraDeduction !== '' && d.extraDeduction != null)
+        ? Math.max(0, Number(d.extraDeduction) || 0)
+        : getExtraDeductionFor(d.month).total);
+
+    /* 同月多笔合并：减除费用与三险一金同月只计一次；无月份的记录各自独立起算。
+       实发口径下，当月三险一金只从首笔记录中扣减，后续记录不再重复扣。 */
+    const hasMonth = d.month && d.month !== '-';
+    const isFirstOfMonth = !hasMonth || d.month !== lastMonth;
+    if (isFirstOfMonth) {
+      lastMonth = d.month || '';
+      cumDeduction += 5000 + si + extra;
+      if (!d._isBonus) {
+        cumSI = round2(cumSI + si);
+        cumExtra = round2(cumExtra + extra);
+      }
+    }
+
+    const salaryCtx = { socialInsurance: isFirstOfMonth ? si : 0, extraDeduction: isFirstOfMonth ? extra : 0 };
+    let r;
+    if (batchDirection === 'forward') {
+      r = calcTaxForward(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx);
+    } else {
+      r = calcTaxReverse(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx);
+    }
+    cumIncome = r.cumIncome;
+    cumTax = r.cumTaxDue;
+
+    rows.push({
+      person: group.name,
+      idCard: d.idCard || group.idCard,
+      phone: d.phone || group.phone,
+      bankCard: d.bankCard || group.bankCard,
+      ...d,
+      ...r,
+      _isGap: false,
+      _isOldPolicy: false,
+      _isBonus: !!d._isBonus,
+      _bonusSeparate: false,
+      _bonusStrategy: d._isBonus ? 'combined' : '',
+      _siMissing: siMissing,
+      _cityUnknown: cityUnknown,
+      _yearFallback: !pol.matched,
+      _siDetail: siD,
+      _cityKey: cityKey,
+      _cumSI: cumSI,
+      _cumExtra: cumExtra,
+      cityName: CITY_POLICY_LIBRARY[cityKey].name + (cityUnknown ? `（未识别:${d.city}）` : ''),
+      policyYearLabel: pol.label + (!pol.matched ? '（年度未匹配）' : '')
+    });
+  });
+
+  return rows;
+}
+
+/** 批量·年终奖单独计税行：不进入累计链，独立按 ÷12 档计税 */
+function makeBatchBonusSeparateRow(group, b, rows) {
+  const amt = round2(Number(b.bonus) || 0);
+  const tax = calcBonusTaxSeparate(amt);
+  const bkt = getMonthlyBracket(amt);
+  const rowCityKey = b.city ? findCityKey(b.city) : null;
+  const cityUnknown = !!b.city && !rowCityKey;
+  const cityKey = rowCityKey || batchCityId || salaryParams.cityId;
+  const pol = resolvePolicyMemo(cityKey, b.month);
+  let cumIncome = 0, cumDeduction = 0;
+  rows.forEach(r => { if ((r.month || '') <= b.month) { cumIncome = r.cumIncome; cumDeduction = r.cumDeduction; } });
+  return {
+    person: group.name,
+    idCard: b.idCard || group.idCard,
+    phone: b.phone || group.phone,
+    bankCard: b.bankCard || group.bankCard,
+    ...b,
+    amount: amt,
+    preTax: amt,
+    withholdingIncome: 0,
+    cumIncome: cumIncome,
+    cumDeduction: cumDeduction,
+    taxableIncome: 0,
+    rate: bkt.rate,
+    quick: bkt.quick,
+    cumTaxDue: tax,
+    currentTax: tax,
+    postTax: round2(amt - tax),
+    _isGap: false,
+    _isOldPolicy: false,
+    _isBonus: true,
+    _bonusSeparate: true,
+    _bonusStrategy: 'separate',
+    _siMissing: false,
+    _cityUnknown: cityUnknown,
+    _yearFallback: !pol.matched,
+    _siDetail: null,
+    _cityKey: cityKey,
+    cityName: CITY_POLICY_LIBRARY[cityKey].name + (cityUnknown ? `（未识别:${b.city}）` : ''),
+    policyYearLabel: pol.label + (!pol.matched ? '（年度未匹配）' : '')
+  };
+}
+
+/** 把年终奖独立行按月份序插入（排在发放月工资行之后） */
+function insertBatchBonusRowSorted(rows, row) {
+  let idx = 0;
+  rows.forEach((r, i) => { if ((r.month || '') <= row.month) idx = i + 1; });
+  rows.splice(idx, 0, row);
+}
+
+/**
+ * 批量·单人工资薪金入口：有年终奖时按「人 × 年」对比单独计税 vs 并入综合所得并择优；
+ * 反算方向下并入对比不适用，年终奖一律单独计税独立成行。
+ */
+function runBatchSalaryPerson(group, records) {
+  const bonusRecs = records.filter(r => (Number(r.bonus) || 0) > 0);
+  if (!bonusRecs.length) {
+    return runBatchSalaryPass(group, records, []);
+  }
+  if (batchDirection === 'reverse') {
+    const rows = runBatchSalaryPass(group, records, []);
+    bonusRecs.forEach(b => insertBatchBonusRowSorted(rows, makeBatchBonusSeparateRow(group, b, rows)));
+    return rows;
+  }
+  /* 正算方向：按年对比两方案（跨年累计互不影响，按年分别择优） */
+  const baseRows = runBatchSalaryPass(group, records, []);
+  const combRows = runBatchSalaryPass(group, records, bonusRecs);
+  const yearTaxOf = (arr) => {
+    const m = {};
+    arr.forEach(r => {
+      const y = (r.month || '').split('-')[0] || '-';
+      m[y] = round2((m[y] || 0) + r.currentTax);
+    });
+    return m;
+  };
+  const baseY = yearTaxOf(baseRows);
+  const combY = yearTaxOf(combRows);
+  const sepY = {};
+  bonusRecs.forEach(b => {
+    const y = (b.month || '').split('-')[0] || '-';
+    sepY[y] = round2((sepY[y] || 0) + calcBonusTaxSeparate(Number(b.bonus) || 0));
+  });
+  const planByYear = {};
+  Object.keys(sepY).forEach(y => {
+    const sepTotal = round2((baseY[y] || 0) + sepY[y]);
+    const combTotal = combY[y] || 0;
+    planByYear[y] = {
+      strategy: sepTotal <= combTotal ? 'separate' : 'combined',
+      saving: round2(Math.abs(sepTotal - combTotal))
+    };
+  });
+  bonusRecs.forEach(b => {
+    b._plan = planByYear[(b.month || '').split('-')[0] || '-'];
+  });
+
+  const combinedRecs = bonusRecs.filter(b => b._plan && b._plan.strategy === 'combined');
+  const rows = combinedRecs.length ? runBatchSalaryPass(group, records, combinedRecs) : baseRows;
+  bonusRecs.filter(b => b._plan && b._plan.strategy === 'separate')
+    .forEach(b => insertBatchBonusRowSorted(rows, makeBatchBonusSeparateRow(group, b, rows)));
+  return rows;
+}
+
 /**
  * 执行批量计算（从预览区点击按钮触发）
  */
@@ -4168,92 +5109,17 @@ function runBatchCalc() {
     const group = personsMap[key];
     const records = group.records.slice().sort(compareBatchRecordOrder);
 
+    if (incomeType === 'salary') {
+      allResults.push(...runBatchSalaryPerson(group, records));
+      return;
+    }
+
     let cumIncome = 0, cumTax = 0, cumDeduction = 0;
     let lastMonth = '';
     let lastYear = '';
 
     records.forEach(d => {
-      if (incomeType === 'salary') {
-        /* 工资薪金：始终累计预扣，不适用旧政策与断月重置 */
-        const curYear = d.month && d.month !== '-' ? d.month.split('-')[0] : '';
-        if (curYear && curYear !== lastYear) {
-          if (lastYear !== '') {
-            cumIncome = 0;
-            cumTax = 0;
-            cumDeduction = 0;
-            lastMonth = '';
-          }
-          lastYear = curYear;
-        }
-
-        /* 城市适用链：行内城市 > 整批城市 > 工资参数城市；未知城市回退并标注 */
-        const rowCityKey = d.city ? findCityKey(d.city) : null;
-        const cityUnknown = !!d.city && !rowCityKey;
-        const cityKey = rowCityKey || batchCityId || salaryParams.cityId;
-        const pol = resolvePolicyMemo(cityKey, d.month);
-        /* 公积金比例：行内「公积金比例」列 > 「工资参数」全局档位 */
-        const effFundRate = (d.fundRate !== '' && d.fundRate != null) ? Number(d.fundRate) : salaryParams.fundRate;
-
-        /* 三险一金：行内基数×城市政策 > 全局基数 > 按应发工资作基数（勾选时） > 0 并标注 */
-        let si;
-        let siD = null;
-        const hasRowBase = d.socialBase !== '' && d.socialBase != null && d.socialBase > 0;
-        if (hasRowBase) {
-          const fund = (d.fundBase !== '' && d.fundBase != null) ? d.fundBase : d.socialBase;
-          siD = computeSocialInsuranceDetail(d.socialBase, fund, pol.items, effFundRate);
-          si = siD.total;
-        } else if (salaryParams.socialBase > 0) {
-          siD = computeSocialInsuranceDetail(salaryParams.socialBase, salaryParams.fundBase, pol.items, effFundRate);
-          si = siD.total;
-        } else if (batchGrossAsBase) {
-          siD = computeSocialInsuranceDetail(d.amount, '', pol.items, effFundRate);
-          si = siD.total;
-        } else {
-          si = 0;
-        }
-        si = round2(Math.max(0, Number(si) || 0));
-        const siMissing = !hasRowBase && !(salaryParams.socialBase > 0) && !batchGrossAsBase;
-
-        const extra = (d.extraDeduction !== '' && d.extraDeduction != null)
-          ? Math.max(0, Number(d.extraDeduction) || 0)
-          : Math.max(0, Number(salaryParams.extraDeduction) || 0);
-
-        /* 同月多笔合并：减除费用与三险一金同月只计一次；无月份的记录各自独立起算。
-           实发口径下，当月三险一金只从首笔记录中扣减，后续记录不再重复扣。 */
-        const hasMonth = d.month && d.month !== '-';
-        const isFirstOfMonth = !hasMonth || d.month !== lastMonth;
-        if (isFirstOfMonth) {
-          lastMonth = d.month || '';
-          cumDeduction += 5000 + si + extra;
-        }
-
-        const salaryCtx = { socialInsurance: isFirstOfMonth ? si : 0, extraDeduction: isFirstOfMonth ? extra : 0 };
-        let r;
-        if (batchDirection === 'forward') {
-          r = calcTaxForward(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx);
-        } else {
-          r = calcTaxReverse(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx);
-        }
-        cumIncome = r.cumIncome;
-        cumTax = r.cumTaxDue;
-
-        allResults.push({
-          person: group.name,
-          idCard: d.idCard || group.idCard,
-          phone: d.phone || group.phone,
-          bankCard: d.bankCard || group.bankCard,
-          ...d,
-          ...r,
-          _isGap: false,
-          _isOldPolicy: false,
-          _siMissing: siMissing,
-          _cityUnknown: cityUnknown,
-          _yearFallback: !pol.matched,
-          _siDetail: siD,
-          cityName: CITY_POLICY_LIBRARY[cityKey].name + (cityUnknown ? `（未识别:${d.city}）` : ''),
-          policyYearLabel: pol.label + (!pol.matched ? '（年度未匹配）' : '')
-        });
-      } else if (isNewPolicy(d.month)) {
+      if (isNewPolicy(d.month)) {
         // 新政策：累计预扣
         const parts = d.month.split('-');
         const curYear = parts.length >= 2 ? parts[0] : '';
@@ -4344,6 +5210,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
   const totalPre = results.reduce((s, r) => s + r.preTax, 0);
   const totalTax = results.reduce((s, r) => s + r.currentTax, 0);
   const totalPost = results.reduce((s, r) => s + r.postTax, 0);
+  const totalEmployer = results.reduce((s, r) => s + (r._siDetail && r._siDetail.employer ? r._siDetail.employer.total : 0), 0);
 
   const isSalary = incomeType === 'salary';
   const directionLabel = isSalary
@@ -4386,8 +5253,11 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
     });
     const years = Object.keys(yearGroups).sort();
 
-    let personPre = 0, personTax = 0, personPost = 0;
-    rows.forEach(r => { personPre += r.preTax; personTax += r.currentTax; personPost += r.postTax; });
+    let personPre = 0, personTax = 0, personPost = 0, personEmployer = 0;
+    rows.forEach(r => {
+      personPre += r.preTax; personTax += r.currentTax; personPost += r.postTax;
+      personEmployer += (r._siDetail && r._siDetail.employer ? r._siDetail.employer.total : 0);
+    });
 
     // 构建身份信息标签
     let idBadges = '';
@@ -4404,7 +5274,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
     let yearSections = '';
     years.forEach((yr, yi) => {
       const yRows = yearGroups[yr];
-      const gapColspan = (isSalary ? 13 : 9) + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
+      const gapColspan = (isSalary ? 14 : 9) + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
       const yearSep = yi > 0
         ? `<tr style="background:rgba(108,92,231,0.12);"><td colspan="${gapColspan}" style="text-align:center;padding:10px;font-weight:700;color:var(--accent2);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`
         : '';
@@ -4431,21 +5301,27 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
         const siTitle = r._siDetail
           ? ` title="养老 ¥${formatNum(r._siDetail.pension)} / 医疗 ¥${formatNum(r._siDetail.medical)} / 失业 ¥${formatNum(r._siDetail.unemployment)} / 公积金 ${formatRate(r._siDetail.fundRateUsed)} ¥${formatNum(r._siDetail.fund)}"`
           : (r._siMissing ? ' title="行内与全局均未设置基数，三险一金按 0 计算"' : '');
+        const erTitle = r._siDetail && r._siDetail.employer
+          ? ` title="单位养老 ¥${formatNum(r._siDetail.employer.pension)} / 医疗 ¥${formatNum(r._siDetail.employer.medical)} / 失业 ¥${formatNum(r._siDetail.employer.unemployment)} / 工伤 ¥${formatNum(r._siDetail.employer.injury)} / 公积金 ¥${formatNum(r._siDetail.employer.fund)}"`
+          : '';
+        const isBonusRow = !!r._isBonus;
+        const bonusSep = isBonusRow && r._bonusSeparate;
+        const cumCell = (v) => (bonusSep ? '—' : `¥${formatNum(v)}`);
 
         return gapMarker + oldPolicyMarker + cityWarnMarker + `
-          <tr>
+          <tr${isBonusRow ? ' style="background:rgba(116,185,255,0.06);"' : ''}>
             <td>${seq}</td>
             <td>${r.month}</td>
             ${isSalary ? `<td>${r.cityName || '-'}</td><td style="font-size:12px;color:var(--text2);">${r.policyYearLabel || '-'}</td>` : ''}
             ${extraCols}
             <td>¥${formatNum(batchDirection === 'forward' ? r.preTax : r.postTax)}</td>
-            ${isSalary ? `<td${siTitle}${r._siMissing ? ' style="color:var(--orange);"' : ''}>¥${formatNum(r.socialInsurance || 0)}${r._siMissing ? ' ⚠' : ''}</td><td>¥${formatNum(r.extraDeduction || 0)}</td>` : ''}
-            <td>¥${formatNum(r.cumIncome)}</td>
-            <td>¥${formatNum(r.cumDeduction)}</td>
-            <td>${(r.rate * 100)}%<div style="font-size:10px;color:var(--text2);">速算 ${formatNum(r.quick)}</div></td>
+            ${isSalary ? `<td${siTitle}${r._siMissing ? ' style="color:var(--orange);"' : ''}>¥${formatNum(r.socialInsurance || 0)}${r._siMissing ? ' ⚠' : ''}</td><td${erTitle}>¥${formatNum(r._siDetail && r._siDetail.employer ? r._siDetail.employer.total : 0)}</td><td>¥${formatNum(r.extraDeduction || 0)}</td>` : ''}
+            <td>${cumCell(r.cumIncome)}</td>
+            <td>${cumCell(r.cumDeduction)}</td>
+            <td>${(r.rate * 100)}%<div style="font-size:10px;color:var(--text2);">速算 ${formatNum(r.quick)}${isSalary && isBonusRow ? '（÷12）' : ''}</div></td>
             <td class="tax-col">¥${formatNum(r.currentTax)}</td>
             <td class="highlight">¥${formatNum(batchDirection === 'forward' ? r.postTax : r.preTax)}</td>
-            <td>${isSalary ? '累计预扣' : (r._isOldPolicy ? '旧政策' : '新政策')}</td>
+            <td>${isSalary ? (isBonusRow ? `年终奖·${r._bonusStrategy === 'combined' ? '并入综合所得' : '单独计税'}` : '累计预扣') : (r._isOldPolicy ? '旧政策' : '新政策')}</td>
           </tr>`;
       }).join('');
 
@@ -4461,6 +5337,8 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
           ${idBadges}
           <span style="font-size:12px;color:var(--text2);margin-left:8px;">共 ${rows.length} 条</span>
           <span style="font-size:12px;color:var(--text2);margin-left:auto;">税额合计 <span style="color:var(--red);font-weight:600;">¥${formatNum(personTax)}</span></span>
+          ${isSalary ? `<span style="font-size:12px;color:var(--text2);">单位社保 <span style="color:var(--text2);font-weight:600;">¥${formatNum(personEmployer)}</span></span>
+          <span style="font-size:12px;color:var(--text2);">企业总成本 <span style="color:var(--orange);font-weight:600;">¥${formatNum(round2(personPre + personEmployer))}</span></span>` : ''}
         </div>
         <div style="overflow-x:auto;border:1px solid var(--border);border-radius:0 0 8px 8px;">
           <table class="result-table">
@@ -4471,7 +5349,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
                 ${isSalary ? '<th>城市</th><th>政策年度</th>' : ''}
                 ${extraHeadCols}
                 <th>${preColLabel}</th>
-                ${isSalary ? '<th>三险一金(个人)</th><th>专项附加</th>' : ''}
+                ${isSalary ? '<th>三险一金(个人)</th><th>单位社保公积金</th><th>专项附加</th>' : ''}
                 <th>${isSalary ? '累计应发金额' : '累计发放金额'}</th>
                 <th>累计减除费用</th>
                 <th>适用税率</th>
@@ -4485,7 +5363,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
               <tr class="total-row">
                 <td colspan="${totalColspan}">小计</td>
                 <td>¥${formatNum(batchDirection === 'forward' ? personPre : personPost)}</td>
-                ${isSalary ? `<td></td><td></td><td>¥${formatNum(rows.reduce((s, r) => s + (r.socialInsurance || 0), 0))}</td><td>¥${formatNum(rows.reduce((s, r) => s + (r.extraDeduction || 0), 0))}</td>` : ''}
+                ${isSalary ? `<td></td><td></td><td>¥${formatNum(rows.reduce((s, r) => s + (r.socialInsurance || 0), 0))}</td><td>¥${formatNum(personEmployer)}</td><td>¥${formatNum(rows.reduce((s, r) => s + (r.extraDeduction || 0), 0))}</td>` : ''}
                 <td></td>
                 <td>¥${formatNum(rows.reduce((s, r) => s + (r.cumDeduction || 0), 0))}</td>
                 <td></td>
@@ -4517,13 +5395,23 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
         <div class="label">${isSalary ? '累计实发' : '累计税后'}</div>
         <div class="value green">¥${formatNum(totalPost)}</div>
       </div>
+      ${isSalary ? `
+      <div class="summary-item">
+        <div class="label">单位社保公积金</div>
+        <div class="value" style="color:var(--text2);">¥${formatNum(totalEmployer)}</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">企业用工总成本</div>
+        <div class="value orange">¥${formatNum(round2(totalPre + totalEmployer))}</div>
+      </div>` : ''}
     </div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
       <span style="background:var(--accent);color:#fff;font-size:12px;padding:5px 14px;border-radius:20px;font-weight:700;">📊 ${directionLabel}</span>
       <span style="color:var(--text2);font-size:13px;">计算模式</span>
     </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:12px;">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:12px;flex-wrap:wrap;">
       <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" onclick="resetBatch()">🔄 重置数据</button>
+      ${isSalary ? `<button class="btn btn-green" style="padding:6px 14px;font-size:12px;" onclick="exportBatchExcelFormula()">📊 导出 Excel（公式明细）</button>` : ''}
       <button class="btn btn-green" style="padding:6px 14px;font-size:12px;" onclick="exportBatchCSV()">📥 导出结果 CSV</button>
     </div>
     </div>
@@ -4562,7 +5450,7 @@ function exportBatchCSV() {
   if (hasPhone) headerCols += ',电话';
   if (hasBankCard) headerCols += ',银行卡号';
   if (isSalary) {
-    headerCols += `,月份,城市,政策年度,${preLabel},三险一金(个人),公积金比例,专项附加扣除,累计应发金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},计税方式`;
+    headerCols += `,月份,城市,政策年度,${preLabel},三险一金(个人),单位社保公积金,公积金比例,专项附加扣除,累计应发金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},企业用工总成本,计税方式`;
   } else {
     headerCols += `,月份,${preLabel},本次预扣收入额,累计发放金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},政策类型`;
   }
@@ -4574,8 +5462,13 @@ function exportBatchCSV() {
     if (hasBankCard) cols += `,"${r.bankCard || ''}"`;
     const inAmt = round2(batchDirection === 'forward' ? r.preTax : r.postTax);
     const outAmt = round2(batchDirection === 'forward' ? r.postTax : r.preTax);
+    const bonusSep = r._isBonus && r._bonusSeparate;
+    const erTotal = (r._siDetail && r._siDetail.employer) ? r._siDetail.employer.total : 0;
     if (isSalary) {
-      cols += `,"${r.month}","${r.cityName || ''}","${r.policyYearLabel || ''}",${inAmt},${round2(r.socialInsurance || 0)},${r._siDetail ? formatRate(r._siDetail.fundRateUsed) : ''},${round2(r.extraDeduction || 0)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${outAmt},累计预扣${r._siMissing ? '(三险一金未设置)' : ''}${r._cityUnknown ? '(城市未识别)' : ''}${r._yearFallback ? '(年度未匹配)' : ''}`;
+      const method = r._isBonus
+        ? `年终奖(${r._bonusStrategy === 'combined' ? '并入综合所得' : '单独计税'})`
+        : `累计预扣${r._siMissing ? '(三险一金未设置)' : ''}${r._cityUnknown ? '(城市未识别)' : ''}${r._yearFallback ? '(年度未匹配)' : ''}`;
+      cols += `,"${r.month}","${r.cityName || ''}","${r.policyYearLabel || ''}",${inAmt},${round2(r.socialInsurance || 0)},${round2(erTotal)},${r._siDetail ? formatRate(r._siDetail.fundRateUsed) : ''},${round2(r.extraDeduction || 0)},${bonusSep ? '' : round2(r.cumIncome)},${bonusSep ? '' : round2(r.cumDeduction || 0)},${bonusSep ? '' : round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${outAmt},${round2(inAmt + erTotal)},${method}`;
     } else {
       cols += `,"${r.month}",${inAmt},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${outAmt},${r._isOldPolicy ? '旧政策' : '新政策'}`;
     }
@@ -4587,12 +5480,296 @@ function exportBatchCSV() {
 
 function downloadTemplate() {
   if (incomeType === 'salary') {
-    const csv = '姓名,身份证号,月份,应发工资,城市,社保基数,公积金基数,公积金比例,专项附加扣除\n张三,110101199001011234,2026-01,10000,广州,10000,10000,5,1000\n张三,110101199001011234,2026-02,10000,广州,10000,10000,5,1000\n李四,110101199202022345,2026-01,8000,深圳,8000,,12,\n王五,110101199303033456,2026-01,9000,,,,,800';
+    const csv = '姓名,身份证号,月份,应发工资,城市,社保基数,公积金基数,公积金比例,专项附加扣除,年终奖\n张三,110101199001011234,2026-01,10000,广州,10000,10000,5,1000,\n张三,110101199001011234,2026-02,10000,广州,10000,10000,5,1000,36000\n李四,110101199202022345,2026-01,8000,深圳,8000,,12,,\n王五,110101199303033456,2026-01,9000,,,,,800,';
     downloadFile(csv, '工资薪金个税计算模板.csv', 'text/csv');
   } else {
     const csv = '月份,金额,姓名,身份证号,电话,银行卡号\n2024年11月,15000,张三,110101199001011234,13800138000,6225880112345678\n2024/12,20000,张三,110101199001011234,13800138000,6225880112345678\n2025-01,18000,张三,110101199001011234,13800138000,6225880112345678\n2025-02,22000,张三,110101199001011234,13800138000,6225880112345678\n2024.11,8000,李四,,,6225880198765432\n2024.12,12000,李四,,,6225880198765432\n2025-01,9500,李四,,,6225880198765432';
     downloadFile(csv, '个税计算模板.csv', 'text/csv');
   }
+}
+
+// ==================== Excel 公式明细导出（工资薪金） ====================
+
+/* 列下标 → Excel 列字母（0→A, 26→AA） */
+function colLetter(i) {
+  let s = '';
+  i += 1;
+  while (i > 0) {
+    const m = (i - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    i = Math.floor((i - 1) / 26);
+  }
+  return s;
+}
+
+/* 年度累计税率/速算扣除嵌套 IF（ref=累计应纳税所得额单元格），与 BRACKETS 一致 */
+function fxAnnualRate(ref) {
+  return `IF(${ref}<=36000,0.03,IF(${ref}<=144000,0.1,IF(${ref}<=300000,0.2,IF(${ref}<=420000,0.25,IF(${ref}<=660000,0.3,IF(${ref}<=960000,0.35,0.45))))))`;
+}
+function fxAnnualQuick(ref) {
+  return `IF(${ref}<=36000,0,IF(${ref}<=144000,2520,IF(${ref}<=300000,16920,IF(${ref}<=420000,31920,IF(${ref}<=660000,52920,IF(${ref}<=960000,85920,181920))))))`;
+}
+/* 年终奖 ÷12 月度税率/速算扣除嵌套 IF（ref=奖金单元格），与 MONTHLY_BRACKETS 一致 */
+function fxBonusRate(ref) {
+  return `IF(${ref}/12<=3000,0.03,IF(${ref}/12<=12000,0.1,IF(${ref}/12<=25000,0.2,IF(${ref}/12<=35000,0.25,IF(${ref}/12<=55000,0.3,IF(${ref}/12<=80000,0.35,0.45))))))`;
+}
+function fxBonusQuick(ref) {
+  return `IF(${ref}/12<=3000,0,IF(${ref}/12<=12000,210,IF(${ref}/12<=25000,1410,IF(${ref}/12<=35000,2660,IF(${ref}/12<=55000,4410,IF(${ref}/12<=80000,7160,15160))))))`;
+}
+/* 险种金额公式：ROUND(clamp(基数,上下限)×比例, digits)，上下限内联可溯源 */
+function fxSiAmount(baseRef, item, rateExpr, digits) {
+  let clamped = baseRef;
+  if (item && item.upper != null) clamped = `MIN(${clamped},${item.upper})`;
+  if (item && item.lower != null) clamped = `MAX(${clamped},${item.lower})`;
+  return `ROUND(${clamped}*${rateExpr},${digits})`;
+}
+
+/**
+ * 工资薪金「公式明细」网格构建（多月累计与批量共用）。
+ * 常量列只有原始输入（应发、基数、比例、专项附加），派生值全部是 Excel 公式；
+ * 每格同时写公式 f 与缓存值 v（页面已算出的结果）：打开即显示数值、点开可见公式来源、改输入自动重算。
+ * @param {Array} rows 计算结果行（须含 _siDetail/_cumSI/_cumExtra/_isBonus 等）
+ * @param {object} opts { idCard, phone, bankCard, nameOf, chainKey, cityOf, cityLabel, noteExtra }
+ * @returns {{headers:string[], rows:Array<Array>, maxRow:number}}
+ */
+function buildSalaryFormulaGrid(rows, opts) {
+  opts = opts || {};
+  const showId = !!opts.idCard, showPhone = !!opts.phone, showBank = !!opts.bankCard;
+  const headers = ['姓名'];
+  if (showId) headers.push('身份证号');
+  if (showPhone) headers.push('电话');
+  if (showBank) headers.push('银行卡号');
+  headers.push(
+    '月份', '城市', '项目', '应发工资(税前)', '社保基数', '公积金基数', '公积金比例',
+    '养老(个人)', '医疗(个人)', '失业(个人)', '公积金(个人)', '三险一金合计(个人)',
+    '养老(单位)', '医疗(单位)', '失业(单位)', '工伤(单位)', '公积金(单位)', '单位合计',
+    '专项附加扣除', '当月减除费用', '累计应发', '累计三险一金', '累计专项附加', '累计减除费用',
+    '累计应纳税所得额', '适用税率', '速算扣除数', '累计应纳税额', '累计已预扣', '本期预扣税额',
+    '实发工资', '企业用工总成本', '政策/备注'
+  );
+  let c = 0;
+  const C = { name: c++ };
+  if (showId) C.idCard = c++;
+  if (showPhone) C.phone = c++;
+  if (showBank) C.bankCard = c++;
+  C.month = c++; C.city = c++; C.project = c++; C.amount = c++; C.socialBase = c++; C.fundBase = c++; C.fundRate = c++;
+  C.pension = c++; C.medical = c++; C.unemployment = c++; C.fund = c++; C.siTotal = c++;
+  C.erPension = c++; C.erMedical = c++; C.erUnemployment = c++; C.erInjury = c++; C.erFund = c++; C.erTotal = c++;
+  C.extra = c++; C.deduct = c++; C.cumAmount = c++; C.cumSI = c++; C.cumExtra = c++; C.cumDeduct = c++;
+  C.cumTaxable = c++; C.rate = c++; C.quick = c++; C.cumDue = c++; C.cumPaid = c++; C.curTax = c++;
+  C.postTax = c++; C.cost = c++; C.note = c++;
+  const col = (idx) => colLetter(idx);
+
+  const out = [];
+  let prevRow = null;
+  let prevChain = null;
+  rows.forEach(r => {
+    const er = out.length + 2; // 当前行 Excel 行号（第 1 行为表头）
+    const cityKey = opts.cityOf ? opts.cityOf(r) : salaryParams.cityId;
+    const items = resolvePolicyMemo(cityKey, r.month).items || {};
+    const si = r._siDetail || null;
+    const isBonusSep = !!r._isBonus && r._bonusSeparate;
+    const chainKey = opts.chainKey ? opts.chainKey(r) : '';
+    const chainStart = !prevRow || chainKey !== prevChain;
+    const sameMonth = !chainStart && prevRow && r.month === prevRow.month;
+    const cell = (v, f) => (f ? { v: v, f: f } : { v: v });
+    const num0 = (v) => (typeof v === 'number' && isFinite(v) ? round2(v) : 0);
+    const cells = new Array(headers.length).fill(null);
+
+    cells[C.name] = { v: opts.nameOf ? opts.nameOf(r) : (r.person || '本人') };
+    if (showId) cells[C.idCard] = { v: r.idCard || '' };
+    if (showPhone) cells[C.phone] = { v: r.phone || '' };
+    if (showBank) cells[C.bankCard] = { v: r.bankCard || '' };
+    cells[C.month] = { v: r.month || '' };
+    cells[C.city] = { v: (opts.cityLabel ? opts.cityLabel(r) : (r.cityName || '')) };
+    cells[C.project] = { v: r._isBonus ? '年终奖' : '工资' };
+    cells[C.amount] = { v: num0(r.preTax) };
+
+    /* 基数与比例（原始输入常量；公积金基数跟随社保时用公式引用以体现口径） */
+    if (si && !isBonusSep) {
+      cells[C.socialBase] = { v: num0(si.socialBaseRaw) };
+      if (num0(si.fundBaseRaw) === num0(si.socialBaseRaw)) {
+        cells[C.fundBase] = cell(num0(si.fundBaseRaw), `${col(C.socialBase)}${er}`);
+      } else {
+        cells[C.fundBase] = { v: num0(si.fundBaseRaw) };
+      }
+      cells[C.fundRate] = { v: num0(si.fundRateUsed) };
+    } else {
+      cells[C.socialBase] = { v: 0 };
+      cells[C.fundBase] = { v: 0 };
+      cells[C.fundRate] = { v: 0 };
+    }
+
+    /* 三险一金：个人部分（公积金按 ÷1 取整到元）与单位部分（含工伤） */
+    if (si && !isBonusSep) {
+      const baseRef = `${col(C.socialBase)}${er}`;
+      const fundBaseRef = `${col(C.fundBase)}${er}`;
+      const fundRateRef = `${col(C.fundRate)}${er}`;
+      const pensionItem = items.pension || { personal: 0, lower: null, upper: null };
+      const medicalItem = items.medical || pensionItem;
+      const unemploymentItem = items.unemployment || pensionItem;
+      const fundItem = items.fund || pensionItem;
+      const injuryItem = items.injury || { personal: 0, lower: null, upper: null };
+      const erRate = (k) => (items[k] && items[k].employer != null) ? items[k].employer : 0;
+      cells[C.pension] = cell(si.pension, fxSiAmount(baseRef, pensionItem, pensionItem.personal || 0, 2));
+      cells[C.medical] = cell(si.medical, fxSiAmount(baseRef, medicalItem, medicalItem.personal || 0, 2));
+      cells[C.unemployment] = cell(si.unemployment, fxSiAmount(baseRef, unemploymentItem, unemploymentItem.personal || 0, 2));
+      cells[C.fund] = cell(si.fund, fxSiAmount(fundBaseRef, fundItem, fundRateRef, 0));
+      cells[C.siTotal] = cell(si.total, `SUM(${col(C.pension)}${er}:${col(C.fund)}${er})`);
+      cells[C.erPension] = cell(si.employer.pension, fxSiAmount(baseRef, pensionItem, erRate('pension'), 2));
+      cells[C.erMedical] = cell(si.employer.medical, fxSiAmount(baseRef, medicalItem, erRate('medical'), 2));
+      cells[C.erUnemployment] = cell(si.employer.unemployment, fxSiAmount(baseRef, unemploymentItem, erRate('unemployment'), 2));
+      cells[C.erInjury] = cell(si.employer.injury, fxSiAmount(baseRef, injuryItem, erRate('injury'), 2));
+      const erFundRate = (items.fund && items.fund.employer != null) ? items.fund.employer : fundRateRef;
+      cells[C.erFund] = cell(si.employer.fund, fxSiAmount(fundBaseRef, fundItem, erFundRate, 0));
+      cells[C.erTotal] = cell(si.employer.total, `SUM(${col(C.erPension)}${er}:${col(C.erFund)}${er})`);
+    } else {
+      [C.pension, C.medical, C.unemployment, C.fund, C.siTotal,
+        C.erPension, C.erMedical, C.erUnemployment, C.erInjury, C.erFund, C.erTotal].forEach(k => { cells[k] = { v: 0 }; });
+    }
+
+    /* 专项附加（原始输入）与减除费用 */
+    cells[C.extra] = { v: num0(r.extraDeduction) };
+    const deductFormula = `IF(${col(C.month)}${er}=${col(C.month)}${er - 1},0,5000)`;
+    if (isBonusSep) {
+      /* 年终奖单独计税行：不进入累计链 */
+      cells[C.deduct] = null;
+      cells[C.cumAmount] = null;
+      cells[C.cumSI] = null;
+      cells[C.cumExtra] = null;
+      cells[C.cumDeduct] = null;
+      cells[C.cumTaxable] = null;
+      cells[C.rate] = cell(r.rate, fxBonusRate(`${col(C.amount)}${er}`));
+      cells[C.quick] = cell(r.quick, fxBonusQuick(`${col(C.amount)}${er}`));
+      cells[C.cumDue] = null;
+      cells[C.cumPaid] = null;
+      cells[C.curTax] = cell(r.currentTax, `ROUND(MAX(0,${col(C.amount)}${er}*${col(C.rate)}${er}-${col(C.quick)}${er}),2)`);
+      cells[C.postTax] = cell(r.postTax, `${col(C.amount)}${er}-${col(C.curTax)}${er}`);
+    } else {
+      cells[C.deduct] = chainStart
+        ? cell(5000)
+        : cell(sameMonth ? 0 : 5000, deductFormula);
+      cells[C.cumAmount] = chainStart
+        ? cell(r.cumIncome, `${col(C.amount)}${er}`)
+        : cell(r.cumIncome, `${col(C.cumAmount)}${er - 1}+${col(C.amount)}${er}`);
+      cells[C.cumSI] = chainStart
+        ? cell(r._cumSI || 0, `${col(C.siTotal)}${er}`)
+        : cell(r._cumSI || 0, sameMonth
+          ? `${col(C.cumSI)}${er - 1}`
+          : `${col(C.cumSI)}${er - 1}+${col(C.siTotal)}${er}`);
+      cells[C.cumExtra] = chainStart
+        ? cell(r._cumExtra || 0, `${col(C.extra)}${er}`)
+        : cell(r._cumExtra || 0, sameMonth
+          ? `${col(C.cumExtra)}${er - 1}`
+          : `${col(C.cumExtra)}${er - 1}+${col(C.extra)}${er}`);
+      cells[C.cumDeduct] = chainStart
+        ? cell(r.cumDeduction || 0, `${col(C.deduct)}${er}`)
+        : cell(r.cumDeduction || 0, sameMonth
+          ? `${col(C.cumDeduct)}${er - 1}`
+          : `${col(C.cumDeduct)}${er - 1}+${col(C.deduct)}${er}`);
+      cells[C.cumTaxable] = cell(r.taxableIncome || 0,
+        `MAX(0,${col(C.cumAmount)}${er}-${col(C.cumSI)}${er}-${col(C.cumExtra)}${er}-${col(C.cumDeduct)}${er})`);
+      cells[C.rate] = cell(r.rate, fxAnnualRate(`${col(C.cumTaxable)}${er}`));
+      cells[C.quick] = cell(r.quick, fxAnnualQuick(`${col(C.cumTaxable)}${er}`));
+      cells[C.cumDue] = cell(r.cumTaxDue || 0,
+        `ROUND(MAX(0,ROUND(${col(C.cumTaxable)}${er}*${col(C.rate)}${er}-${col(C.quick)}${er},2)),2)`);
+      cells[C.cumPaid] = chainStart
+        ? { v: 0 }
+        : cell(num0((prevRow.cumTaxDue || 0) - (prevRow.currentTax || 0)),
+          `${col(C.cumPaid)}${er - 1}+${col(C.curTax)}${er - 1}`);
+      cells[C.curTax] = cell(r.currentTax || 0, `MAX(0,${col(C.cumDue)}${er}-${col(C.cumPaid)}${er})`);
+      cells[C.postTax] = cell(r.postTax, `${col(C.amount)}${er}-${col(C.siTotal)}${er}-${col(C.curTax)}${er}`);
+    }
+    cells[C.cost] = cell(num0(r.preTax) + (si && si.employer ? si.employer.total : 0),
+      `${col(C.amount)}${er}+${col(C.erTotal)}${er}`);
+    cells[C.note] = { v: opts.noteExtra ? (opts.noteExtra(r) || '') : '' };
+
+    out.push(cells);
+    prevRow = r;
+    prevChain = chainKey;
+  });
+
+  return { headers: headers, rows: out, maxRow: out.length + 1 };
+}
+
+/** 网格 → SheetJS 工作表（f 公式 + v 缓存值） */
+function gridToWorksheet(grid) {
+  const ws = {};
+  const put = (excelRow, cIdx, cell) => {
+    if (!cell) return;
+    const addr = colLetter(cIdx) + excelRow;
+    const isNum = typeof cell.v === 'number';
+    const c = { t: isNum ? 'n' : 's', v: isNum ? round2(cell.v) : cell.v };
+    if (cell.f) c.f = cell.f;
+    ws[addr] = c;
+  };
+  grid.headers.forEach((h, ci) => put(1, ci, { v: h }));
+  grid.rows.forEach((row, ri) => {
+    row.forEach((cell, ci) => put(ri + 2, ci, cell));
+  });
+  let maxC = grid.headers.length - 1;
+  grid.rows.forEach(row => {
+    for (let i = row.length - 1; i >= 0; i--) { if (row[i]) { maxC = Math.max(maxC, i); break; } }
+  });
+  ws['!ref'] = 'A1:' + colLetter(maxC) + Math.max(1, grid.maxRow);
+  ws['!cols'] = grid.headers.map(h => ({ wch: Math.min(24, Math.max(9, String(h).length * 1.9)) }));
+  return ws;
+}
+
+/** 多月累计 → Excel 公式明细 */
+function exportMultiExcelFormula() {
+  if (incomeType !== 'salary') return alert('公式明细导出目前支持「工资薪金」模式');
+  const results = window._multiResults;
+  if (!results || !results.length) return alert('请先计算');
+  ensureXLSX(() => {
+    const grid = buildSalaryFormulaGrid(results, {
+      nameOf: () => '本人',
+      chainKey: (r) => String(r.month || '').split('-')[0],
+      cityOf: () => salaryParams.cityId,
+      cityLabel: (r) => {
+        const pol = resolvePolicyMemo(salaryParams.cityId, r.month);
+        return pol.label + (r._yearFallback ? '（年度未匹配）' : '');
+      },
+      noteExtra: (r) => {
+        const parts = [];
+        if (multiDirection === 'reverse') parts.push('应发为税后反算值');
+        if (r._isBonus) parts.push(r._bonusSeparate ? '年终奖单独计税（÷12 定档）' : '年终奖并入综合所得');
+        return parts.join('；');
+      }
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, gridToWorksheet(grid), '工资计算明细');
+    XLSX.writeFile(wb, '多月工资个税明细(公式版).xlsx');
+  });
+}
+
+/** 批量 → Excel 公式明细（换人/跨年自动重置累计公式基准） */
+function exportBatchExcelFormula() {
+  if (incomeType !== 'salary') return alert('公式明细导出目前支持「工资薪金」模式');
+  const results = window._batchResults;
+  if (!results || !results.length) return alert('请先计算');
+  ensureXLSX(() => {
+    const grid = buildSalaryFormulaGrid(results, {
+      idCard: results.some(r => r.idCard),
+      phone: results.some(r => r.phone),
+      bankCard: results.some(r => r.bankCard),
+      nameOf: (r) => r.person || '',
+      chainKey: (r) => (r.person || '') + '|' + String(r.month || '').split('-')[0],
+      cityOf: (r) => r._cityKey || salaryParams.cityId,
+      cityLabel: (r) => r.cityName || '',
+      noteExtra: (r) => {
+        const parts = [];
+        if (r.policyYearLabel) parts.push(r.policyYearLabel);
+        if (batchDirection === 'reverse') parts.push('应发为税后反算值');
+        if (r._isBonus) parts.push(r._bonusStrategy === 'combined' ? '年终奖并入综合所得' : '年终奖单独计税（÷12 定档）');
+        if (r._siMissing) parts.push('三险一金未设置基数，按 0 计');
+        return parts.join('；');
+      }
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, gridToWorksheet(grid), '批量工资明细');
+    XLSX.writeFile(wb, '批量工资个税明细(公式版).xlsx');
+  });
 }
 
 // ==================== Utils ====================
@@ -4814,6 +5991,12 @@ function runSelfTests() {
       [['张三', '110101199001011234', '2026-01', 10000, '广州', 10000, 10000, 5, 1000]]);
     return m.cols[7].type === 'fundRate' && m.cols[8].type === 'extraDeduction';
   })());
+  isTrue('列识别：「年终奖」→bonus（不与金额列冲突）', (() => {
+    const m = detectColumnMapping(
+      ['姓名', '应发工资', '年终奖', '社保基数'],
+      [['张三', 10000, 36000, 10000]]);
+    return m.cols[1].type === 'amount' && m.cols[2].type === 'bonus' && m.cols[3].type === 'socialBase';
+  })());
 
   // —— 政策库 JSON roundtrip ——
   const snapshot = JSON.stringify(CITY_POLICY_LIBRARY);
@@ -4855,6 +6038,134 @@ function runSelfTests() {
   eq('劳务反算税前 10000', lrev.preTax, 10000, 0.01);
   const l2 = calcTaxForward(10000, l1.cumIncome, 10000, l1.cumTaxDue);
   eq('劳务2月个税 90（累计递进）', l2.currentTax, 90);
+
+  // —— 年终奖单独计税（÷12 定档）——
+  eq('年终奖36000 → 3% 档税额 1080', calcBonusTaxSeparate(36000), 1080);
+  eq('年终奖144000 → 10% 档税额 14190', calcBonusTaxSeparate(144000), 14190);
+  eq('年终奖36001 → 跳 10% 档税额 3390.10', calcBonusTaxSeparate(36001), 3390.1);
+  eq('年终奖123456.78 → 10% 档税额 12135.68', calcBonusTaxSeparate(123456.78), 12135.68);
+
+  // —— 年终奖无效区间（六段边界）——
+  isTrue('无效区间 37000 命中，建议回到 36000', (() => {
+    const z = findBonusTrapZone(37000);
+    return z && z.suggest === 36000 && z.to > 38566 && z.to < 38567;
+  })());
+  isTrue('无效区间上沿 38566.67 仍命中', !!findBonusTrapZone(38566.67));
+  isTrue('无效区间外 40000 不命中', findBonusTrapZone(40000) == null);
+  isTrue('144000 恰在下沿不命中', findBonusTrapZone(144000) == null);
+  isTrue('144001 命中第二段', (() => {
+    const z = findBonusTrapZone(144001);
+    return z && z.suggest === 144000;
+  })());
+  isTrue('1120000 命中最末段，1120000.01 不命中', !!findBonusTrapZone(1120000) && findBonusTrapZone(1120000.01) == null);
+
+  // —— 年终奖方案对比：月薪1万×12（三险一金2250+附加1000）+ 发12月年终奖36000 ——
+  const bonusEntries = [];
+  for (let m = 1; m <= 12; m++) {
+    bonusEntries.push({ month: '2026-' + String(m).padStart(2, '0'), amount: 10000, si: 2250, extra: 1000 });
+  }
+  eq('全年工资累计税额（无年终奖）630', calcSalaryCumulativeTax(bonusEntries), 630);
+  const bonusPlan = compareBonusStrategies(bonusEntries, { amount: 36000, month: '2026-12' });
+  eq('方案对比·单独计税税额 1080', bonusPlan.separateTax, 1080);
+  eq('方案对比·并入增量 2550', bonusPlan.combinedBonusTax, 2550);
+  eq('方案对比·并入全年合计 3180', bonusPlan.combinedTotalTax, 3180);
+  isTrue('方案对比·推荐单独计税，节税 1470', bonusPlan.recommendation === 'separate' && bonusPlan.saving === 1470);
+  const bonusPlanHi = compareBonusStrategies(bonusEntries, { amount: 36000, month: '2026-01' });
+  isTrue('方案对比·并入发放月不影响全年合计（3180）', bonusPlanHi.combinedTotalTax === 3180);
+  const bonusMerge = mergeBonusIntoEntries(bonusEntries.slice(0, 2), { amount: 36000, month: '2026-01' });
+  isTrue('年终奖插入发放月工资之后', bonusMerge.length === 3 && bonusMerge[1].isBonus === true && bonusMerge[2].month === '2026-02');
+
+  // —— 单位部分社保（自定义城市：单位养老16% 医疗8% 失业0.5% 工伤0.2%，公积金同个人档）——
+  const erDet = computeSocialInsuranceDetail(10000, '', customItems, 0.05);
+  eq('单位养老 1600', erDet.employer.pension, 1600);
+  eq('单位医疗 800', erDet.employer.medical, 800);
+  eq('单位失业 50', erDet.employer.unemployment, 50);
+  eq('单位工伤 20', erDet.employer.injury, 20);
+  eq('单位公积金同个人档 500', erDet.employer.fund, 500);
+  eq('单位合计 2970', erDet.employer.total, 2970);
+
+  // —— 专项附加分项（含互斥与上限校验）——
+  isTrue('分项合计：子女2000+房租1500+赡养3000=6500', (() => {
+    const r = computeExtraDetailFor({
+      childEducation: { on: true, count: 1 },
+      houseRent: { on: true, tier: 1500 },
+      support: { on: true, mode: 'solo' }
+    }, '2026-01');
+    return r.total === 6500 && r.messages.length === 0;
+  })());
+  isTrue('分项校验：房贷房租互斥提示且按房贷计', (() => {
+    const r = computeExtraDetailFor({
+      houseLoan: { on: true }, houseRent: { on: true, tier: 1500 }
+    }, '2026-01');
+    return r.total === 1000 && r.messages.some(m => m.indexOf('互斥') >= 0);
+  })());
+  isTrue('分项校验：非独生分摊 2000 → 按 1500 计并提示', (() => {
+    const r = computeExtraDetailFor({ support: { on: true, mode: 'share', share: 2000 } }, '2026-01');
+    return r.total === 1500 && r.messages.length === 1;
+  })());
+  isTrue('职业资格 3600 仅取得当月计入', (() => {
+    const d = { education: { on: true, kind: 'cert', certMonth: '2026-06' } };
+    const a = computeExtraDetailFor(d, '2026-06').total;
+    const b = computeExtraDetailFor(d, '2026-07').total;
+    return a === 3600 && b === 0;
+  })());
+  isTrue('大病医疗不计入月度预扣，返回年度金额', (() => {
+    const r = computeExtraDetailFor({ medical: { on: true, annual: 40000 } }, '2026-01');
+    return r.total === 0 && r.medicalAnnual === 40000 && r.messages.length === 1;
+  })());
+  eq('单一总额模式回退：getExtraDeductionFor', getExtraDeductionFor('2026-01').total, 1000);
+
+  // —— Excel 公式明细网格：公式与缓存值抽查 ——
+  const gridRows = [];
+  (() => {
+    let cumIncome = 0, cumTaxT = 0, cumDed = 0, cumSIg = 0, cumEx = 0;
+    for (let m = 1; m <= 2; m++) {
+      const ym = '2026-0' + m;
+      const siD = computeSocialInsuranceDetail(10000, '', customItems, 0.05);
+      cumDed += 5000 + siD.total + 1000;
+      const rr = calcTaxForward(10000, cumIncome, cumDed, cumTaxT, TAX_STRATEGIES.salary, { socialInsurance: siD.total, extraDeduction: 1000 });
+      cumIncome = rr.cumIncome; cumTaxT = rr.cumTaxDue;
+      cumSIg = round2(cumSIg + siD.total); cumEx = round2(cumEx + 1000);
+      gridRows.push({
+        month: ym, person: '测试', preTax: 10000, postTax: rr.postTax, withholdingIncome: rr.withholdingIncome,
+        cumIncome: rr.cumIncome, cumDeduction: rr.cumDeduction, taxableIncome: rr.taxableIncome,
+        rate: rr.rate, quick: rr.quick, cumTaxDue: rr.cumTaxDue, currentTax: rr.currentTax,
+        extraDeduction: 1000, socialInsurance: siD.total,
+        _siDetail: siD, _cumSI: cumSIg, _cumExtra: cumEx, _isBonus: false
+      });
+    }
+  })();
+  const grid = buildSalaryFormulaGrid(gridRows, {
+    chainKey: () => '2026', cityOf: () => 'custom', nameOf: () => '测试', cityLabel: () => '自定义政策'
+  });
+  isTrue('公式导出·养老公式为 ROUND(F2*0.08,2) 且缓存一致', (() => {
+    const cell = grid.rows[0][8];
+    return cell.f === 'ROUND(F2*0.08,2)' && Math.abs(cell.v - gridRows[0]._siDetail.pension) < 1e-9;
+  })());
+  isTrue('公式导出·公积金基数引用社保基数（=F2），缴存额 ROUND(G2*H2,0)', (() => {
+    return grid.rows[0][6].f === 'F2' && grid.rows[0][11].f === 'ROUND(G2*H2,0)';
+  })());
+  isTrue('公式导出·单位养老公式 ROUND(F2*0.16,2)', grid.rows[0][13].f === 'ROUND(F2*0.16,2)');
+  isTrue('公式导出·累计应发跨行相加（V2+E3）', grid.rows[1][21].f === 'V2+E3');
+  isTrue('公式导出·本期预扣 MAX(0,AC3-AD3) 且缓存一致', (() => {
+    const cell = grid.rows[1][30];
+    return cell.f === 'MAX(0,AC3-AD3)' && Math.abs(cell.v - gridRows[1].currentTax) < 1e-9;
+  })());
+  isTrue('公式导出·税率列嵌套 IF 引用累计应纳税所得额', (() => {
+    const f = grid.rows[0][26].f;
+    return f.indexOf('Z2<=36000') >= 0 && f.indexOf('0.45') >= 0;
+  })());
+  isTrue('公式导出·派生列公式与缓存值成对出现', grid.rows.slice(0, 2).every(row =>
+    [21, 22, 23, 24, 25, 26, 27, 28, 30, 31, 32].every(ci => row[ci] && row[ci].f && typeof row[ci].v === 'number')));
+  isTrue('公式导出·年终奖独立行用 ÷12 档公式且不进累计链', (() => {
+    const bonusRow = buildBonusSeparateRow({ amount: 36000, month: '2026-02' }, gridRows);
+    const withBonus = gridRows.concat([bonusRow]);
+    const g2 = buildSalaryFormulaGrid(withBonus, {
+      chainKey: () => '2026', cityOf: () => 'custom', nameOf: () => '测试', cityLabel: () => '自定义政策'
+    });
+    const last = g2.rows[2];
+    return last[26].f.indexOf('/12<=3000') >= 0 && last[21] === null && last[30].f === 'ROUND(MAX(0,E4*AA4-AB4),2)' && last[30].v === 1080;
+  })());
 
   Object.assign(salaryParams, saved);
 

@@ -5,28 +5,14 @@
  * ============================================================ */
 (function () {
 'use strict';
-  const calcBonusTaxSeparate = (...a) => TaxEngine.calcBonusTaxSeparate(...a);
-  const findCityKey = (...a) => PolicyLib.findCityKey(...a);
-  const compareBonusStrategies = (...a) => TaxEngine.compareBonusStrategies(...a);
-  const buildSalaryFormulaGrid = (...a) => Exporter.buildSalaryFormulaGrid(...a);
-  const round2 = (...a) => TaxUtils.round2(...a);
-  const CITY_POLICY_LIBRARY = PolicyLib.CITY_POLICY_LIBRARY;
-  const calcTaxForward = (...a) => TaxEngine.calcTaxForward(...a);
-  const buildBonusSeparateRow = (...a) => PageMulti.buildBonusSeparateRow(...a);
-  const findBonusTrapZone = (...a) => TaxEngine.findBonusTrapZone(...a);
-  const parseFundRate = (...a) => TaxUtils.parseFundRate(...a);
-  const detectColumnMapping = (...a) => PageBatch.detectColumnMapping(...a);
-  const TAX_STRATEGIES = TaxEngine.TAX_STRATEGIES;
-  const getExtraDeductionFor = (...a) => SocialIns.getExtraDeductionFor(...a);
-  const rowsToLibrary = (...a) => PolicyLib.rowsToLibrary(...a);
-  const computeSocialInsuranceDetail = (...a) => SocialIns.computeSocialInsuranceDetail(...a);
-  const computeExtraDetailFor = (...a) => SocialIns.computeExtraDetailFor(...a);
-  const libraryToRows = (...a) => PolicyLib.libraryToRows(...a);
-  const computeSocialInsurance = (...a) => SocialIns.computeSocialInsurance(...a);
-  const calcSalaryCumulativeTax = (...a) => TaxEngine.calcSalaryCumulativeTax(...a);
-  const resolvePolicy = (...a) => PolicyLib.resolvePolicy(...a);
-  const mergeBonusIntoEntries = (...a) => TaxEngine.mergeBonusIntoEntries(...a);
-  const calcTaxReverse = (...a) => TaxEngine.calcTaxReverse(...a);
+  const { round2, parseFundRate } = TaxUtils;
+  const { calcBonusTaxSeparate, calcTaxForward, calcTaxReverse, calcSalaryCumulativeTax, compareBonusStrategies,
+    findBonusTrapZone, mergeBonusIntoEntries, TAX_STRATEGIES } = TaxEngine;
+  const { CITY_POLICY_LIBRARY, findCityKey, resolvePolicy, rowsToLibrary, libraryToRows } = PolicyLib;
+  const { computeSocialInsurance, computeSocialInsuranceDetail, computeExtraDetailFor, getExtraDeductionFor } = SocialIns;
+  const { buildSalaryFormulaGrid } = Exporter;
+  const { buildBonusSeparateRow } = PageMulti;
+  const { detectColumnMapping } = PageBatch;
 
 // ==================== Self tests ====================
 // 控制台自检：城市政策库、逐险种 clamp、年度匹配、工资累计预扣、反算、劳务回归。

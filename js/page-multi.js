@@ -5,26 +5,16 @@
  * ============================================================ */
 (function () {
 'use strict';
-  const computeSocialInsuranceFor = (...a) => SocialIns.computeSocialInsuranceFor(...a);
-  const calcBonusTaxSeparate = (...a) => TaxEngine.calcBonusTaxSeparate(...a);
-  const exportMultiExcelFormula = (...a) => Exporter.exportMultiExcelFormula(...a);
-  const compareBonusStrategies = (...a) => TaxEngine.compareBonusStrategies(...a);
-  const round2 = (...a) => TaxUtils.round2(...a);
-  const isNewPolicy = (...a) => TaxEngine.isNewPolicy(...a);
-  const calcTaxForward = (...a) => TaxEngine.calcTaxForward(...a);
-  const findBonusTrapZone = (...a) => TaxEngine.findBonusTrapZone(...a);
-  const calcTaxReverseOldPolicy = (...a) => TaxEngine.calcTaxReverseOldPolicy(...a);
-  const TAX_STRATEGIES = TaxEngine.TAX_STRATEGIES;
-  const getExtraDeductionFor = (...a) => SocialIns.getExtraDeductionFor(...a);
-  const getMonthlyBracket = (...a) => TaxEngine.getMonthlyBracket(...a);
-  const mergeBonusIntoEntries = (...a) => TaxEngine.mergeBonusIntoEntries(...a);
-  const formatNum = (...a) => TaxUtils.formatNum(...a);
-  const isGapMonth = (...a) => TaxEngine.isGapMonth(...a);
-  const calcTaxReverse = (...a) => TaxEngine.calcTaxReverse(...a);
-  const resolvePolicyMemo = (...a) => PolicyLib.resolvePolicyMemo(...a);
-  const escAttr = (...a) => UI.escAttr(...a);
-  const toggleNoteDetail = (...a) => UI.toggleNoteDetail(...a);
-  const calcTaxOldPolicy = (...a) => TaxEngine.calcTaxOldPolicy(...a);
+  const { round2, formatNum, formatRate, downloadFile } = TaxUtils;
+  const { calcBonusTaxSeparate, compareBonusStrategies, calcTaxForward, calcTaxReverse, calcTaxOldPolicy,
+    calcTaxReverseOldPolicy, findBonusTrapZone, getMonthlyBracket, isGapMonth, isNewPolicy,
+    mergeBonusIntoEntries, TAX_STRATEGIES } = TaxEngine;
+  const { computeSocialInsuranceFor, getExtraDeductionFor } = SocialIns;
+  const { resolvePolicyMemo } = PolicyLib;
+  const { escAttr } = UI;
+  const { exportMultiExcelFormula } = Exporter;
+  const { calcTaxByDirection, gapResetRowHTML, incomeIOLabels, insertBonusRowSorted, oldPolicyRowHTML,
+    siEmployerTooltip, siEmployerTotal, yearResetRowHTML } = PageShared;
 
 // ==================== Multi-month: 12-Month Grid ====================
 
@@ -57,36 +47,32 @@ function buildMonthGrid() {
 }
 
 function onMonthAmountInput(input) {
-  const cell = input.parentElement;
   const val = parseFloat(input.value);
-  if (!isNaN(val) && val > 0) {
-    cell.classList.add('has-data');
-  } else {
-    cell.classList.remove('has-data');
-  }
+  input.parentElement.classList.toggle('has-data', !isNaN(val) && val > 0);
 }
 
 /* 根据计算方向与所得类型更新输入提示 */
 function updateMultiInputHints() {
-  const isReverse = multiDirection === 'reverse';
-  const isSalary = incomeType === 'salary';
-  const placeholder = isSalary
-    ? (isReverse ? '期望实发' : '应发工资')
-    : (isReverse ? '税后金额' : '税前金额');
+  const reverse = multiDirection === 'reverse';
+  const salary = incomeType === 'salary';
+  let placeholder, hint;
+  if (salary) {
+    placeholder = reverse ? '期望实发' : '应发工资';
+    hint = reverse
+      ? '输入每月期望实发工资，系统反算所需应发工资。留空的月份自动跳过。'
+      : '输入每月应发工资（税前），按上方「工资参数」卡设置的城市与基数计算三险一金与个税。留空的月份自动跳过。';
+  } else {
+    placeholder = reverse ? '税后金额' : '税前金额';
+    hint = reverse
+      ? '输入每月期望税后收入，系统反算所需税前收入。留空的月份自动跳过。'
+      : '输入每月税前收入，留空的月份自动跳过。断月重置会检测跳过的月份间隔。';
+  }
   for (let m = 1; m <= 12; m++) {
     const input = document.getElementById('m-amount-' + m);
     if (input) input.placeholder = placeholder;
   }
   const hintEl = document.getElementById('multi-input-hint');
-  if (hintEl) {
-    hintEl.textContent = isSalary
-      ? (isReverse
-        ? '输入每月期望实发工资，系统反算所需应发工资。留空的月份自动跳过。'
-        : '输入每月应发工资（税前），系统按「工资参数」计算三险一金与个税。留空的月份自动跳过。')
-      : (isReverse
-        ? '输入每月期望税后收入，系统反算所需税前收入。留空的月份自动跳过。'
-        : '输入每月税前收入，留空的月份自动跳过。断月重置会检测跳过的月份间隔。');
-  }
+  if (hintEl) hintEl.textContent = hint;
 }
 
 /* 年终奖计税方案选择：'auto' 跟随推荐 | 'separate' 单独计税 | 'combined' 并入综合所得 */
@@ -128,17 +114,6 @@ function buildBonusSeparateRow(bonus, results) {
     _isBonus: true, _bonusSeparate: true, _siDetail: null
   };
 }
-
-/** 按月份序把年终奖行插入结果序列（排在发放月工资行之后） */
-function insertBonusRowSorted(results, row) {
-  let idx = 0;
-  for (let i = 0; i < results.length; i++) {
-    if ((results[i].month || '') <= row.month) idx = i + 1;
-  }
-  results.splice(idx, 0, row);
-}
-
-/** HTML 属性/文本转义，防标签、引号等特殊字符破坏结构 */
 
 function buildNoteCellHTML(r, isSalary) {
   let html = `<div class="note-name">${escAttr(r.note)}</div>`;
@@ -221,7 +196,7 @@ function calcMulti() {
   }
   window._multiBonusPlan = plan;
 
-  (entries).forEach(d => {
+  entries.forEach(d => {
     if (isSalary) {
       /* 工资薪金：始终累计预扣；逐月匹配城市政策；每月减除 = 5000 + 三险一金 + 专项附加（同月只计一次） */
       const isBonusRow = !!d.isBonus;
@@ -234,9 +209,7 @@ function calcMulti() {
       }
 
       const salaryCtx = { socialInsurance: salarySI, extraDeduction: salaryExtra };
-      const r = multiDirection === 'forward'
-        ? calcTaxForward(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx)
-        : calcTaxReverse(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx);
+      const r = calcTaxByDirection(multiDirection, d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx);
 
       cumIncome = r.cumIncome;
       cumTax = r.cumTaxDue;
@@ -277,12 +250,7 @@ function calcMulti() {
         cumDeduction += 5000;
       }
 
-      let r;
-      if (multiDirection === 'forward') {
-        r = calcTaxForward(d.amount, cumIncome, cumDeduction, cumTax);
-      } else {
-        r = calcTaxReverse(d.amount, cumIncome, cumDeduction, cumTax);
-      }
+      const r = calcTaxByDirection(multiDirection, d.amount, cumIncome, cumDeduction, cumTax);
 
       cumIncome = r.cumIncome;
       cumTax = r.cumTaxDue;
@@ -295,12 +263,7 @@ function calcMulti() {
       });
     } else {
       // 旧政策：按次预扣，不累计
-      let r;
-      if (multiDirection === 'forward') {
-        r = calcTaxOldPolicy(d.amount);
-      } else {
-        r = calcTaxReverseOldPolicy(d.amount);
-      }
+      const r = multiDirection === 'forward' ? calcTaxOldPolicy(d.amount) : calcTaxReverseOldPolicy(d.amount);
       
       // 旧政策切换到新政策时需要重置累计
       if (lastMonth && isNewPolicy(lastMonth)) {
@@ -351,17 +314,10 @@ function renderMultiResults(results, plan) {
   const totalPost = results.reduce((s, r) => s + r.postTax, 0);
   const totalSI = results.reduce((s, r) => s + (r.socialInsurance || 0), 0);
   const totalExtra = results.reduce((s, r) => s + (r.extraDeduction || 0), 0);
-  const totalEmployer = results.reduce((s, r) => s + (r._siDetail && r._siDetail.employer ? r._siDetail.employer.total : 0), 0);
+  const totalEmployer = results.reduce((s, r) => s + siEmployerTotal(r._siDetail), 0);
   const avgRate = totalPre > 0 ? totalTax / totalPre : 0;
-  const multiDirLabel = isSalary
-    ? (multiDirection === 'forward' ? '应发工资 → 实发工资' : '实发工资 → 应发工资')
-    : (multiDirection === 'forward' ? '税前收入 → 税后收入' : '税后收入 → 税前收入');
-  const inLabel = isSalary
-    ? (multiDirection === 'forward' ? '应发工资' : '期望实发（已知）')
-    : (multiDirection === 'forward' ? '税前收入' : '税后收入（已知）');
-  const outLabel = isSalary
-    ? (multiDirection === 'forward' ? '实发工资' : '应发工资（反算）')
-    : (multiDirection === 'forward' ? '税后收入' : '税前收入（反算）');
+  const { dirLabel: multiDirLabel, preLabel: inLabel, postLabel: outLabel } =
+    incomeIOLabels(multiDirection, '期望实发（已知）');
   const colCount = isSalary ? 13 : 11;
 
   /* 专项附加政策提示（分项模式），全年只提示一次 */
@@ -427,7 +383,7 @@ function renderMultiResults(results, plan) {
     const yRows = yearGroups[yr];
     // 跨年分隔
     if (yi > 0) {
-      tbodyHTML += `<tr style="background:var(--t-primary-bg);"><td colspan="${colCount}" class="span-row" style="text-align:center;padding:10px;font-weight:700;color:var(--t-primary);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`;
+      tbodyHTML += yearResetRowHTML(colCount, yr);
     }
     // 年度小计变量
     let yPre = 0, yTax = 0, yPost = 0;
@@ -435,16 +391,16 @@ function renderMultiResults(results, plan) {
       seq++;
       // 断月标记
       if (r._isGap) {
-        tbodyHTML += `<tr style="background:var(--t-error-bg);"><td colspan="${colCount}" class="span-row" style="text-align:center;padding:8px;font-weight:600;color:var(--t-error);font-size:12px;"> 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`;
+        tbodyHTML += gapResetRowHTML(colCount, r.month);
       }
       // 旧政策标记
       if (r._isOldPolicy) {
-        tbodyHTML += `<tr style="background:var(--t-warning-bg);"><td colspan="${colCount}" class="span-row" style="text-align:center;padding:8px;font-weight:600;color:var(--t-warning);font-size:12px;">旧政策：${r.month} 按生产经营所得计算，不扣税（2025年10月1日前）</td></tr>`;
+        tbodyHTML += oldPolicyRowHTML(colCount, r.month);
       }
       const isBonusRow = !!r._isBonus;
-      const erTitle = r._siDetail && r._siDetail.employer
-        ? ` title="单位养老 ¥${formatNum(r._siDetail.employer.pension)} / 医疗 ¥${formatNum(r._siDetail.employer.medical)} / 失业 ¥${formatNum(r._siDetail.employer.unemployment)} / 工伤 ¥${formatNum(r._siDetail.employer.injury)} / 公积金 ¥${formatNum(r._siDetail.employer.fund)}"`
-        : '';
+      const bonusSep = isSalary && isBonusRow && r._bonusSeparate;
+      const cumCell = (v) => (bonusSep ? '—' : `¥${formatNum(v)}`);
+      const erTitle = siEmployerTooltip(r._siDetail);
       tbodyHTML += `
         <tr${isBonusRow ? ' class="bonus-row"' : ''}>
           <td>${r.month}</td>
@@ -452,13 +408,13 @@ function renderMultiResults(results, plan) {
           <td>¥${formatNum(multiDirection === 'forward' ? r.preTax : r.postTax)}</td>
           ${isSalary
             ? `<td${r._siDetail ? ` title="养老 ¥${formatNum(r._siDetail.pension)} / 医疗 ¥${formatNum(r._siDetail.medical)} / 失业 ¥${formatNum(r._siDetail.unemployment)} / 公积金 ¥${formatNum(r._siDetail.fund)}"` : ''}>¥${formatNum(r.socialInsurance)}</td>
-               <td${erTitle}>¥${formatNum(r._siDetail && r._siDetail.employer ? r._siDetail.employer.total : 0)}</td>
+               <td${erTitle}>¥${formatNum(siEmployerTotal(r._siDetail))}</td>
                <td>¥${formatNum(r.extraDeduction)}</td>`
             : `<td>¥${formatNum(r.withholdingIncome)}</td>`}
-          <td>${isSalary && isBonusRow && r._bonusSeparate ? '—' : `¥${formatNum(r.cumIncome)}`}</td>
-          <td>${isSalary && isBonusRow && r._bonusSeparate ? '—' : `¥${formatNum(r.cumDeduction)}`}</td>
-          <td>${isSalary && isBonusRow && r._bonusSeparate ? '—' : `¥${formatNum(r.taxableIncome)}`}</td>
-          <td>${(r.rate * 100)}%<div style="font-size:10px;color:var(--t-text-2);white-space:nowrap;">速算 ${formatNum(r.quick)}${isSalary && isBonusRow ? '（÷12）' : ''}</div></td>
+          <td>${cumCell(r.cumIncome)}</td>
+          <td>${cumCell(r.cumDeduction)}</td>
+          <td>${cumCell(r.taxableIncome)}</td>
+          <td>${formatRate(r.rate)}<div style="font-size:10px;color:var(--t-text-2);white-space:nowrap;">速算 ${formatNum(r.quick)}${isSalary && isBonusRow ? '（÷12）' : ''}</div></td>
           <td class="tax-col">¥${formatNum(r.currentTax)}</td>
           <td class="highlight">¥${formatNum(multiDirection === 'forward' ? r.postTax : r.preTax)}</td>
           <td>${isSalary ? (isBonusRow ? '年终奖' : '累计预扣') : (r._isOldPolicy ? '旧政策' : '新政策')}</td>
@@ -568,27 +524,22 @@ function exportMultiCSV() {
   if (!window._multiResults) return;
   const results = window._multiResults;
   const isSalary = incomeType === 'salary';
-  const preLabel = isSalary
-    ? (multiDirection === 'forward' ? '应发工资' : '期望实发（已知）')
-    : (multiDirection === 'forward' ? '税前收入' : '税后收入（已知）');
-  const postLabel = isSalary
-    ? (multiDirection === 'forward' ? '实发工资' : '应发工资（反算）')
-    : (multiDirection === 'forward' ? '税后收入' : '税前收入（反算）');
+  const { preLabel, postLabel } = incomeIOLabels(multiDirection, '期望实发（已知）');
   let header, rows;
   if (isSalary) {
     header = `月份,备注,${preLabel},三险一金(个人),单位社保公积金,专项附加扣除,累计发放金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},计税方式\n`;
     rows = results.map(r =>
-      `${r.month},${r.note}${r._isBonus ? (r._bonusSeparate ? '(单独计税)' : '(并入综合所得)') : ''},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.socialInsurance || 0)},${round2(r._siDetail && r._siDetail.employer ? r._siDetail.employer.total : 0)},${round2(r.extraDeduction || 0)},${r._isBonus && r._bonusSeparate ? '' : round2(r.cumIncome)},${r._isBonus && r._bonusSeparate ? '' : round2(r.cumDeduction || 0)},${r._isBonus && r._bonusSeparate ? '' : round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},${r._isBonus ? '年终奖' : '累计预扣'}`
+      `${r.month},${r.note}${r._isBonus ? (r._bonusSeparate ? '(单独计税)' : '(并入综合所得)') : ''},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.socialInsurance || 0)},${round2(siEmployerTotal(r._siDetail))},${round2(r.extraDeduction || 0)},${r._isBonus && r._bonusSeparate ? '' : round2(r.cumIncome)},${r._isBonus && r._bonusSeparate ? '' : round2(r.cumDeduction || 0)},${r._isBonus && r._bonusSeparate ? '' : round2(r.taxableIncome)},${formatRate(r.rate)},${round2(r.quick || 0)},${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},${r._isBonus ? '年终奖' : '累计预扣'}`
     ).join('\n');
   } else {
     header = `月份,备注,${preLabel},本次预扣收入额,累计发放金额,累计减除费用,累计应纳税所得额,适用税率,速算扣除数,本期预扣税额,${postLabel},政策类型\n`;
     rows = results.map(r =>
-      `${r.month},${r.note},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},${r._isOldPolicy ? '旧政策' : '新政策'}`
+      `${r.month},${r.note},${round2(multiDirection === 'forward' ? r.preTax : r.postTax)},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${formatRate(r.rate)},${round2(r.quick || 0)},${round2(r.currentTax)},${round2(multiDirection === 'forward' ? r.postTax : r.preTax)},${r._isOldPolicy ? '旧政策' : '新政策'}`
     ).join('\n');
   }
   downloadFile(header + rows, '多月个税计算结果.csv', 'text/csv');
 }
 
 
-  window.PageMulti = { MONTH_NAMES,buildBonusSeparateRow,buildMonthGrid,buildNoteCellHTML,calcMulti,exportMultiCSV,insertBonusRowSorted,onMonthAmountInput,readMultiBonus,renderMultiResults,resetMulti,setMultiBonusStrategy,updateMultiInputHints };
+  window.PageMulti = { MONTH_NAMES,buildBonusSeparateRow,buildMonthGrid,buildNoteCellHTML,calcMulti,exportMultiCSV,exportMultiExcelFormula,insertBonusRowSorted,onMonthAmountInput,readMultiBonus,renderMultiResults,resetMulti,setMultiBonusStrategy,updateMultiInputHints };
 })();

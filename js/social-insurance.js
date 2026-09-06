@@ -6,9 +6,8 @@
  * ============================================================ */
 (function () {
 'use strict';
-  const round2 = (...a) => TaxUtils.round2(...a);
-  const clampItemBase = (...a) => PolicyLib.clampItemBase(...a);
-  const resolvePolicyMemo = (...a) => PolicyLib.resolvePolicyMemo(...a);
+  const { round2 } = TaxUtils;
+  const { clampItemBase, resolvePolicyMemo } = PolicyLib;
 
 const EXTRA_ITEM_STANDARDS = {
   childEducation: '¥2,000/月/孩',
@@ -83,20 +82,26 @@ function computeSocialInsuranceDetail(socialBase, fundBase, items, fundRate) {
   const rawFund = (fundBase === '' || fundBase == null || isNaN(parseFloat(fundBase))) ? socialBase : fundBase;
   const socialRaw = Number(socialBase) || 0;
   const fundRaw = Number(rawFund) || 0;
+  const injuryItem = items.injury || { lower: null, upper: null };
 
-  const pension = clampItemBase(socialBase, items.pension) * items.pension.personal;
-  const medical = clampItemBase(socialBase, items.medical) * items.medical.personal;
-  const unemployment = clampItemBase(socialBase, items.unemployment) * items.unemployment.personal;
-  const fund = Math.round(clampItemBase(rawFund, items.fund) * fr);
+  const pensionBase = clampItemBase(socialBase, items.pension);
+  const medicalBase = clampItemBase(socialBase, items.medical);
+  const unemploymentBase = clampItemBase(socialBase, items.unemployment);
+  const injuryBase = clampItemBase(socialBase, injuryItem);
+  const fundClamped = clampItemBase(rawFund, items.fund);
 
   const erRate = (k) => (items[k] && items[k].employer != null) ? items[k].employer : 0;
-  const erPension = clampItemBase(socialBase, items.pension) * erRate('pension');
-  const erMedical = clampItemBase(socialBase, items.medical) * erRate('medical');
-  const erUnemployment = clampItemBase(socialBase, items.unemployment) * erRate('unemployment');
-  const injuryItem = items.injury || { lower: null, upper: null };
-  const erInjury = clampItemBase(socialBase, injuryItem) * ((items.injury && items.injury.employer != null) ? items.injury.employer : 0);
+  const pension = pensionBase * items.pension.personal;
+  const medical = medicalBase * items.medical.personal;
+  const unemployment = unemploymentBase * items.unemployment.personal;
+  const fund = Math.round(fundClamped * fr);
+
+  const erPension = pensionBase * erRate('pension');
+  const erMedical = medicalBase * erRate('medical');
+  const erUnemployment = unemploymentBase * erRate('unemployment');
+  const erInjury = injuryBase * erRate('injury');
   const erFundRate = (items.fund.employer != null) ? items.fund.employer : fr;
-  const erFund = Math.round(clampItemBase(rawFund, items.fund) * erFundRate);
+  const erFund = Math.round(fundClamped * erFundRate);
 
   return {
     pension: round2(pension),

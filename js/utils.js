@@ -42,7 +42,9 @@ function formatRate(rate) {
 
 /* 文件导出：多层回退兼容不同浏览器和协议（file:// / https://） */
 async function downloadFile(content, filename, type) {
-  const blob = new Blob(['\uFEFF' + content], { type: type + ';charset=utf-8' });
+  /* 文本内容加 BOM 便于 Excel 识别 UTF-8；二进制内容（如 xlsx）原样封装 */
+  const isBinary = content instanceof ArrayBuffer || ArrayBuffer.isView(content) || content instanceof Blob;
+  const blob = new Blob(isBinary ? [content] : ['\uFEFF' + content], { type: type + ';charset=utf-8' });
 
   /* 第一层：File System Access API（支持自选保存路径，仅安全上下文可用） */
   if (window.showSaveFilePicker) {
@@ -77,8 +79,12 @@ async function downloadFile(content, filename, type) {
     return;
   } catch (e) { /* 继续回退 */ }
 
-  /* 第三层：新窗口打开内容（兼容 file:// 协议及 Safari 等严格环境） */
+  /* 第三层：新窗口打开内容（兼容 file:// 协议及 Safari 等严格环境；二进制无文本预览，直接提示） */
   try {
+    if (isBinary) {
+      alert('当前环境无法直接保存 ' + filename + '，请改用支持的浏览器（Chrome / Edge / Firefox）');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = function () {
       const w = window.open('', '_blank');
@@ -108,5 +114,5 @@ async function downloadFile(content, filename, type) {
 }
 
 
-  window.TaxUtils = { formatNum,formatRate,parseAmount,parseFundRate,round2 };
+  window.TaxUtils = { downloadFile,formatNum,formatRate,parseAmount,parseFundRate,round2 };
 })();

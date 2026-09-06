@@ -1,21 +1,14 @@
 /* ============================================================
- * page-params.js — PageParams 工资参数页
- * 职责：城市/年度/公积金比例联动、参数读取、政策明细预览表、专项附加分项面板。
+ * page-params.js — PageParams 工资参数卡组件（内嵌于多月累计页，仅工资薪金模式显示）
+ * 职责：城市/年度/公积金比例联动、参数读取、卡片折叠与摘要、政策明细预览表、
+ *       专项附加分项面板、批量页「整批参保城市」下拉联动。
  * 对外接口：window.PageParams。依赖：PolicyLib/SocialIns/UI/TaxState/TaxUtils。
  * ============================================================ */
 (function () {
 'use strict';
-  const round2 = (...a) => TaxUtils.round2(...a);
-  const CITY_POLICY_LIBRARY = PolicyLib.CITY_POLICY_LIBRARY;
-  const EXTRA_ITEM_STANDARDS = SocialIns.EXTRA_ITEM_STANDARDS;
-  const isPolicyDataFileMissing = (...a) => PolicyLib.isPolicyDataFileMissing(...a);
-  const computeSocialInsuranceDetail = (...a) => SocialIns.computeSocialInsuranceDetail(...a);
-  const computeExtraDetailFor = (...a) => SocialIns.computeExtraDetailFor(...a);
-  const resolvePolicy = (...a) => PolicyLib.resolvePolicy(...a);
-  const formatNum = (...a) => TaxUtils.formatNum(...a);
-  const FUND_RATES_STD = PolicyLib.FUND_RATES_STD;
-  const suggestHouseRentTier = (...a) => SocialIns.suggestHouseRentTier(...a);
-  const SI_ITEMS = PolicyLib.SI_ITEMS;
+  const { round2, formatRate, formatNum } = TaxUtils;
+  const { CITY_POLICY_LIBRARY, FUND_RATES_STD, SI_ITEMS, isPolicyDataFileMissing, resolvePolicy } = PolicyLib;
+  const { EXTRA_ITEM_STANDARDS, computeSocialInsuranceDetail, computeExtraDetailFor, suggestHouseRentTier } = SocialIns;
 
 function onExtraDetailToggle() {
   const cb = document.getElementById('sp-extra-detail-on');
@@ -25,6 +18,7 @@ function onExtraDetailToggle() {
   const single = document.getElementById('sp-extra-deduction');
   if (single) single.disabled = salaryParams.extraDetail.on;
   renderExtraDetailPanel();
+  renderParamsSummary();
 }
 
 function onExtraItemToggle(key, checked) {
@@ -56,13 +50,14 @@ function renderExtraDetailPanel() {
   const wrap = document.getElementById('sp-extra-detail-wrap');
   if (!wrap) return;
   const d = salaryParams.extraDetail;
+  const CTRL_STYLE = 'background:var(--t-bg-header);border:1px solid var(--t-border);border-radius:6px;padding:4px 8px;color:var(--t-text);font-size:12px;outline:none;';
   const inp = (key, field, value, min, step, width) =>
     `<input type="number" min="${min}" step="${step}" value="${value == null ? '' : value}"
       oninput="PageParams.onExtraItemInput('${key}','${field}',this.value)"
-      style="width:${width || 80}px;background:var(--t-bg-header);border:1px solid var(--t-border);border-radius:6px;padding:4px 8px;color:var(--t-text);font-size:12px;outline:none;">`;
+      style="width:${width || 80}px;${CTRL_STYLE}">`;
   const sel = (key, field, options, value) =>
     `<select onchange="PageParams.onExtraItemInput('${key}','${field}',this.value)"
-      style="background:var(--t-bg-header);border:1px solid var(--t-border);border-radius:6px;padding:4px 8px;color:var(--t-text);font-size:12px;outline:none;">
+      style="${CTRL_STYLE}">
       ${options.map(o => `<option value="${o[0]}" ${String(o[0]) === String(value) ? 'selected' : ''}>${o[1]}</option>`).join('')}
     </select>`;
   const row = (key, label, controls, note) => `
@@ -76,7 +71,7 @@ function renderExtraDetailPanel() {
     </div>`;
   const monthInp = (key, field, value) =>
     `<input type="month" value="${value || ''}" onchange="PageParams.onExtraItemInput('${key}','${field}',this.value)"
-      style="background:var(--t-bg-header);border:1px solid var(--t-border);border-radius:6px;padding:4px 8px;color:var(--t-text);font-size:12px;outline:none;">`;
+      style="${CTRL_STYLE}">`;
 
   wrap.innerHTML = `
     ${row('childEducation', ' 子女教育', `每孩 ${inp('childEducation', 'count', d.childEducation.count, 0, 1)}`)}
@@ -124,8 +119,7 @@ function buildCityOptions(selectedValue, skipCustom) {
 
 /** 城市切换：重建年度/公积金比例选项后再读取参数 */
 function onCityParamChange() {
-  const cityId = document.getElementById('sp-city')?.value || 'custom';
-  const city = CITY_POLICY_LIBRARY[cityId] || CITY_POLICY_LIBRARY.custom;
+  const cityId = document.getElementById('sp-city')?.value || 'custom';  const city = CITY_POLICY_LIBRARY[cityId] || CITY_POLICY_LIBRARY.custom;
   const yearSel = document.getElementById('sp-year');
   if (yearSel) {
     yearSel.innerHTML = `<option value="auto" ${salaryParams.policyYear === 'auto' ? 'selected' : ''}>自动匹配</option>` +
@@ -143,7 +137,7 @@ function onCityParamChange() {
       frSel.style.display = '';
       frCustomWrap.style.display = 'none';
       frSel.innerHTML = rates.map(r =>
-        `<option value="${r}" ${Number(r) === Number(salaryParams.fundRate) ? 'selected' : ''}>${(r * 100).toFixed(1).replace(/\.0$/, '')}%</option>`).join('');
+        `<option value="${r}" ${Number(r) === Number(salaryParams.fundRate) ? 'selected' : ''}>${formatRate(r)}</option>`).join('');
       // 当前比例不在该城市可选档内时重置为最低档
       if (!rates.some(r => Number(r) === Number(salaryParams.fundRate))) {
         frSel.value = String(rates[0]);
@@ -154,7 +148,55 @@ function onCityParamChange() {
   if (!salaryParams.extraDetail.houseRent.tierUntouched) {
     salaryParams.extraDetail.houseRent.tier = suggestHouseRentTier(cityId);
   }
+  refreshBatchCitySelect();
   readSalaryParams();
+}
+
+/* ---------- 内嵌参数卡：折叠 / 摘要 / 批量城市下拉联动 ---------- */
+
+const PARAMS_CARD_KEY = 'tc-params-card-collapsed';
+
+/** 卡片头摘要：城市 · 社保基数 · 公积金比例 · 附加月合计（随输入实时刷新） */
+function renderParamsSummary() {
+  const el = document.getElementById('params-card-summary');
+  if (!el) return;
+  const city = CITY_POLICY_LIBRARY[salaryParams.cityId];
+  const base = salaryParams.socialBase > 0 ? `基数 ¥${formatNum(salaryParams.socialBase)}` : '基数未设';
+  const extraTotal = salaryParams.extraDetail.on
+    ? computeExtraDetailFor(salaryParams.extraDetail, '').total
+    : salaryParams.extraDeduction;
+  el.textContent = `${city ? city.name : '自定义'} · ${base} · 公积金 ${formatRate(salaryParams.fundRate)} · 附加 ¥${formatNum(extraTotal)}/月`;
+}
+
+function applyCardCollapsed(collapsed) {
+  const body = document.getElementById('params-card-body');
+  const arrow = document.getElementById('params-card-arrow');
+  if (body) body.style.display = collapsed ? 'none' : '';
+  if (arrow) arrow.textContent = collapsed ? '▸' : '▾';
+}
+
+/** 点击卡片头切换折叠；状态记忆到 localStorage */
+function toggleCard() {
+  const body = document.getElementById('params-card-body');
+  if (!body) return;
+  const collapsed = body.style.display === 'none';
+  applyCardCollapsed(!collapsed);
+  localStorage.setItem(PARAMS_CARD_KEY, collapsed ? '0' : '1');
+}
+
+/** 初始化折叠态：无存储时按社保基数是否已设置决定（未设置→展开引导，已设→收起） */
+function initCard() {
+  const saved = localStorage.getItem(PARAMS_CARD_KEY);
+  const collapsed = saved == null ? salaryParams.socialBase > 0 : saved === '1';
+  applyCardCollapsed(collapsed);
+}
+
+/** 批量页「整批参保城市」下拉重建（保留当前选择）；政策库增删城市后经 onCityParamChange 联动 */
+function refreshBatchCitySelect() {
+  const sel = document.getElementById('batch-city');
+  if (!sel) return;
+  sel.innerHTML = `<option value="">跟随「工资参数」中的城市</option>` + buildCityOptions('', true);
+  sel.value = batchCityId || '';
 }
 
 /** 渲染参数卡中的险种政策明细表（只读；预览月份默认当前月，可切换） */
@@ -171,7 +213,7 @@ function renderSalaryItemsTable() {
   const pol = resolvePolicy(salaryParams.cityId, previewYM);
   const det = computeSocialInsuranceDetail(salaryParams.socialBase, salaryParams.fundBase, pol.items, salaryParams.fundRate);
   const fmtBound = (v) => (v == null ? '不限' : formatNum(v));
-  const fmtRate = (r) => (r == null ? '同个人档' : ((r * 100).toFixed(1).replace(/\.0$/, '') + '%'));
+  const fmtRate = (r) => (r == null ? '同个人档' : formatRate(r));
   el.innerHTML = `
     <thead>
       <tr>
@@ -187,7 +229,7 @@ function renderSalaryItemsTable() {
         const erRate = it.key === 'fund' ? (item.employer != null ? item.employer : null) : item.employer;
         return `<tr>
           <td>${it.label}</td>
-          <td>${(rate * 100).toFixed(1).replace(/\.0$/, '')}%</td>
+          <td>${formatRate(rate)}</td>
           <td>${fmtRate(erRate)}</td>
           <td>${fmtBound(item.lower)}</td>
           <td>${fmtBound(item.upper)}</td>
@@ -235,9 +277,10 @@ function readSalaryParams() {
   const extra = readNum('sp-extra-deduction', 0, Infinity);
   if (extra !== '') salaryParams.extraDeduction = extra;
   renderSalaryItemsTable();
+  renderParamsSummary();
   return ok;
 }
 
 
-  window.PageParams = { buildCityOptions,onCityParamChange,onExtraDetailToggle,onExtraItemInput,onExtraItemToggle,readSalaryParams,renderExtraDetailPanel,renderSalaryItemsTable,updateExtraDetailHint };
+  window.PageParams = { buildCityOptions,initCard,onCityParamChange,onExtraDetailToggle,onExtraItemInput,onExtraItemToggle,readSalaryParams,refreshBatchCitySelect,renderExtraDetailPanel,renderParamsSummary,renderSalaryItemsTable,toggleCard,updateExtraDetailHint };
 })();

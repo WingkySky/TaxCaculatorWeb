@@ -6,7 +6,7 @@
  * ============================================================ */
 (function () {
 'use strict';
-  const round2 = (...a) => TaxUtils.round2(...a);
+  const { round2 } = TaxUtils;
 
 // ==================== Tax Engine ====================
 
@@ -187,54 +187,41 @@ const POLICY_SWITCH_MONTH = 10;
 
 /**
  * 判断该月份是否适用新政策
- * @param {string} monthStr 月份字符串，格式为 "YYYY-MM"
+ * @param {string} monthStr 月份字符串，格式为 "YYYY-MM"；缺省时按当前日期判断
  * @returns {boolean} true表示适用新政策，false表示适用旧政策
  */
 function isNewPolicy(monthStr) {
+  let year, month;
   if (!monthStr || monthStr === '-') {
-    // 如果没有月份信息，默认适用当前政策
     const now = new Date();
-    const nowYear = now.getFullYear();
-    const nowMonth = now.getMonth() + 1;
-    return nowYear > POLICY_SWITCH_YEAR || 
-           (nowYear === POLICY_SWITCH_YEAR && nowMonth >= POLICY_SWITCH_MONTH);
+    year = now.getFullYear();
+    month = now.getMonth() + 1;
+  } else {
+    const parts = monthStr.split('-');
+    if (parts.length < 2) return false;
+    year = parseInt(parts[0]);
+    month = parseInt(parts[1]);
   }
-  
-  const parts = monthStr.split('-');
-  if (parts.length < 2) return false;
-  
-  const year = parseInt(parts[0]);
-  const month = parseInt(parts[1]);
-  
-  return year > POLICY_SWITCH_YEAR || 
+  return year > POLICY_SWITCH_YEAR ||
          (year === POLICY_SWITCH_YEAR && month >= POLICY_SWITCH_MONTH);
 }
 
 /**
- * 旧政策：计算单笔预扣税额（按次预扣）
- * 劳务报酬所得按次预扣预缴：
- * - 收入不超过4000元的，减除费用800元
- * - 收入超过4000元的，减除20%的费用
- * - 其余额为应纳税所得额
- * - 适用20%-40%的三级累进预扣率
+ * 旧政策：2025年10月1日之前按生产经营所得处理，不扣税、不累计
  */
 function calcTaxOldPolicy(income) {
-  // 旧政策：2025年10月1日之前按生产经营所得计算，不扣税
-  const currentTax = 0;
-  const postTax = income;
-  
   return {
     preTax: income,
-    withholdingIncome: 0, // 不预扣
-    cumIncome: 0,  // 旧政策不累计
+    withholdingIncome: 0,
+    cumIncome: 0,
     cumDeduction: 0,
     taxableIncome: 0,
     rate: 0,
     quick: 0,
     cumTaxDue: 0,
-    currentTax: currentTax,
-    postTax: postTax,
-    isOldPolicy: true  // 标记为旧政策
+    currentTax: 0,
+    postTax: income,
+    isOldPolicy: true
   };
 }
 
@@ -345,7 +332,7 @@ function compareBonusStrategies(salaryEntries, bonus) {
   };
 }
 
-/* 批量城市相关状态 */
+/* 批量城市相关状态见 TaxState（batchCityId / batchGrossAsBase） */
 
   window.TaxEngine = { BONUS_TRAP_ZONES,BRACKETS,DEFAULT_STRATEGY,MONTHLY_BRACKETS,POLICY_SWITCH_MONTH,POLICY_SWITCH_YEAR,TAX_STRATEGIES,calcBonusTaxSeparate,calcSalaryCumulativeTax,calcTaxForward,calcTaxOldPolicy,calcTaxReverse,calcTaxReverseOldPolicy,compareBonusStrategies,findBonusTrapZone,getBracket,getMonthlyBracket,isGapMonth,isNewPolicy,mergeBonusIntoEntries,parseYearMonth };
 })();

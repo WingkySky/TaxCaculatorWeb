@@ -29,10 +29,6 @@
         <span class="menu-label">批量计算</span>
       </button>
       <div class="menu-group">配置</div>
-      <button class="menu-item" data-route="params">
-        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg></span>
-        <span class="menu-label">工资参数</span>
-      </button>
       <button class="menu-item" data-route="policy">
         <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg></span>
         <span class="menu-label">政策库</span>
@@ -75,6 +71,50 @@
           <div class="card-title">
             <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></span>
             多月累计预扣计算
+          </div>
+
+          <!-- 工资参数卡（内嵌，仅工资薪金模式显示；点击卡片头折叠/展开） -->
+          <div id="multi-params-card" style="display:none;margin-bottom:20px;">
+            <div class="boxed-block" style="padding:12px 16px;">
+              <div class="row-flex" style="align-items:center;margin-bottom:0;cursor:pointer;user-select:none;" onclick="PageParams.toggleCard()" title="点击展开/收起工资参数">
+                <span id="params-card-arrow" style="font-size:11px;color:var(--t-text-2);width:14px;">▾</span>
+                <strong style="font-size:13px;color:var(--t-text);">⚙ 工资参数</strong>
+                <span id="params-card-summary" style="font-size:12px;color:var(--t-text-2);flex:1;"></span>
+                <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();App.navigate('policy')">政策数据管理</button>
+              </div>
+              <div id="params-card-body" style="margin-top:12px;">
+                <div class="info-box warning" id="sp-data-missing" style="display:none;margin-bottom:12px;">
+                  未检测到政策数据文件 <strong>tax-policy-data.js</strong>（应与本页面放在同一目录）。请拷贝该文件到同目录后刷新，或在「政策数据管理」中导入 Excel / JSON。
+                </div>
+                <div class="salary-params-grid">
+                  <div class="sp-field"><label>参保城市</label><select id="sp-city" onchange="PageParams.onCityParamChange()"></select></div>
+                  <div class="sp-field"><label>政策年度</label><select id="sp-year" onchange="PageParams.readSalaryParams()"></select></div>
+                  <div class="sp-field"><label>公积金比例</label><select id="sp-fund-rate" onchange="PageParams.readSalaryParams()"></select></div>
+                  <div class="sp-field" id="sp-fund-rate-custom-wrap" style="display:none;"><label>公积金比例（%）</label><input type="number" id="sp-fund-rate-custom" min="0" max="100" step="0.1" placeholder="如 7" oninput="PageParams.readSalaryParams()"></div>
+                  <div class="sp-field"><label>社保基数（元/月）</label><input type="number" id="sp-social-base" min="0" step="0.01" placeholder="如 10000" oninput="PageParams.readSalaryParams()"></div>
+                  <div class="sp-field"><label>公积金基数（元/月）</label><input type="number" id="sp-fund-base" min="0" step="0.01" placeholder="留空跟随社保基数" oninput="PageParams.readSalaryParams()"></div>
+                  <div class="sp-field"><label>专项附加扣除（元/月）</label><input type="number" id="sp-extra-deduction" min="0" step="0.01" placeholder="如 1500" oninput="PageParams.readSalaryParams()"></div>
+                </div>
+                <div class="boxed-block">
+                  <div class="row-flex" style="margin-bottom:4px;align-items:center;">
+                    <label style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--t-text);cursor:pointer;">
+                      <input type="checkbox" id="sp-extra-detail-on" onchange="PageParams.onExtraDetailToggle()"> 专项附加扣除按项分列（子女教育/婴幼儿/房贷房租等 7 项，含政策校验）
+                    </label>
+                    <span id="sp-extra-total-hint" style="margin-left:auto;font-size:12px;color:var(--t-success);font-weight:600;"></span>
+                  </div>
+                  <div id="sp-extra-detail-wrap" style="display:none;"></div>
+                </div>
+                <div class="row-flex" style="align-items:center;margin-bottom:8px;font-size:12px;color:var(--t-text-2);">
+                  <span>政策预览月份：</span>
+                  <input type="month" id="sp-preview-month" class="input-inline" onchange="PageParams.renderSalaryItemsTable()">
+                  <span>实际计算按<strong>每笔发放月份</strong>自动匹配政策年度（如 2026 年 1~6 月适用 2025 社保年度标准）；切换上方月份可预览该月适用的上下限与实缴。</span>
+                </div>
+                <div class="scroll-x" style="margin-bottom:10px;">
+                  <table class="result-table" id="sp-items-table" style="font-size:12px;"></table>
+                </div>
+                <div class="hint" style="margin-bottom:0;">政策数据为参考值，请以当地社保部门公布为准，可在「政策数据管理」中修改或导入。社保保留到分；公积金月缴存额按惯例四舍五入取整到元。批量计算时，行内「城市 / 社保基数 / 公积金基数 / 公积金比例」列优先于上述设置，其次为批量页「全局兜底设置」。</div>
+              </div>
+            </div>
           </div>
 
           <div class="seg seg-block" style="margin-bottom:20px;">
@@ -135,6 +175,23 @@
             <div id="accum-indicator" class="info-box success" style="display:none;margin:12px auto 0;max-width:420px;"></div>
           </div>
 
+          <!-- 全局兜底设置（工资薪金，上传前即可配置；取值顺序：行内列 > 此处 > 工资参数） -->
+          <div class="boxed-block" id="batch-global-fallback" style="display:none;margin-top:16px;">
+            <div class="row-flex" style="align-items:flex-end;">
+              <div class="sp-field" style="min-width:280px;">
+                <label>整批参保城市（表格有「城市」列时按行内为准）</label>
+                <select id="batch-city" onchange="TaxState.batchCityId=this.value;"></select>
+              </div>
+              <div class="sp-field" style="padding-bottom:6px;">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--t-text);margin:0;">
+                  <input type="checkbox" id="batch-gross-as-base" onchange="TaxState.batchGrossAsBase=this.checked;">
+                  无基数时按应发工资作基数
+                </label>
+              </div>
+            </div>
+            <div class="hint" style="margin:8px 0 0;">三险一金按城市政策自动计算（个人 + 单位，结果含企业用工总成本）。取值顺序：行内「城市 / 社保基数 / 公积金基数 / 公积金比例」列 &gt; 此处整批设置 &gt; 「多月累计」页的「工资参数」；均无基数则记 0 并在结果中标注。</div>
+          </div>
+
           <div style="margin-top:16px;">
             <div class="info-box" id="batch-info-labor" style="margin-bottom:12px;">
               <strong>表格格式要求（劳务报酬）：</strong><br>
@@ -163,51 +220,6 @@
 
         <!-- 计算结果区（计算后显示） -->
         <div id="batch-result" style="display:none;"></div>
-      </section>
-
-      <!-- ======== 页面：工资参数 ======== -->
-      <section class="page" id="page-params">
-        <div class="info-box warning" id="params-mode-banner" style="display:none;">
-          当前为<strong>劳务报酬</strong>模式，以下工资参数仅对<strong>工资薪金</strong>计算生效。
-        </div>
-
-        <div class="card" id="salary-params-card">
-          <div class="card-title">
-            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg></span>
-            工资薪金参数（多月累计与批量计算共用）
-            <button class="btn btn-secondary btn-sm" onclick="App.navigate('policy')">政策数据管理</button>
-          </div>
-          <div class="info-box warning" id="sp-data-missing" style="display:none;margin-bottom:12px;">
-            未检测到政策数据文件 <strong>tax-policy-data.js</strong>（应与本页面放在同一目录）。请拷贝该文件到同目录后刷新，或在「政策数据管理」中导入 Excel / JSON。
-          </div>
-          <div class="salary-params-grid">
-            <div class="sp-field"><label>参保城市</label><select id="sp-city" onchange="PageParams.onCityParamChange()"></select></div>
-            <div class="sp-field"><label>政策年度</label><select id="sp-year" onchange="PageParams.readSalaryParams()"></select></div>
-            <div class="sp-field"><label>公积金比例</label><select id="sp-fund-rate" onchange="PageParams.readSalaryParams()"></select></div>
-            <div class="sp-field" id="sp-fund-rate-custom-wrap" style="display:none;"><label>公积金比例（%）</label><input type="number" id="sp-fund-rate-custom" min="0" max="100" step="0.1" placeholder="如 7" oninput="PageParams.readSalaryParams()"></div>
-            <div class="sp-field"><label>社保基数（元/月）</label><input type="number" id="sp-social-base" min="0" step="0.01" placeholder="如 10000" oninput="PageParams.readSalaryParams()"></div>
-            <div class="sp-field"><label>公积金基数（元/月）</label><input type="number" id="sp-fund-base" min="0" step="0.01" placeholder="留空跟随社保基数" oninput="PageParams.readSalaryParams()"></div>
-            <div class="sp-field"><label>专项附加扣除（元/月）</label><input type="number" id="sp-extra-deduction" min="0" step="0.01" placeholder="如 1500" oninput="PageParams.readSalaryParams()"></div>
-          </div>
-          <div class="boxed-block">
-            <div class="row-flex" style="margin-bottom:4px;align-items:center;">
-              <label style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--t-text);cursor:pointer;">
-                <input type="checkbox" id="sp-extra-detail-on" onchange="PageParams.onExtraDetailToggle()"> 专项附加扣除按项分列（子女教育/婴幼儿/房贷房租等 7 项，含政策校验）
-              </label>
-              <span id="sp-extra-total-hint" style="margin-left:auto;font-size:12px;color:var(--t-success);font-weight:600;"></span>
-            </div>
-            <div id="sp-extra-detail-wrap" style="display:none;"></div>
-          </div>
-          <div class="row-flex" style="align-items:center;margin-bottom:8px;font-size:12px;color:var(--t-text-2);">
-            <span>政策预览月份：</span>
-            <input type="month" id="sp-preview-month" class="input-inline" onchange="PageParams.renderSalaryItemsTable()">
-            <span>实际计算按<strong>每笔发放月份</strong>自动匹配政策年度（如 2026 年 1~6 月适用 2025 社保年度标准）；切换上方月份可预览该月适用的上下限与实缴。</span>
-          </div>
-          <div class="scroll-x" style="margin-bottom:10px;">
-            <table class="result-table" id="sp-items-table" style="font-size:12px;"></table>
-          </div>
-          <div class="hint">政策数据为参考值，请以当地社保部门公布为准，可在「政策数据管理」中修改或导入。社保保留到分；公积金月缴存额按惯例四舍五入取整到元。批量计算时，行内「城市 / 社保基数 / 公积金基数 / 公积金比例」列优先于上述设置。</div>
-        </div>
       </section>
 
       <!-- ======== 页面：政策库 ======== -->
@@ -250,64 +262,87 @@
         </div>
       </section>
 
-      <!-- ======== 页面：计算规则 ======== -->
+      <!-- ======== 页面：计算规则（跟随顶部所得类型切换） ======== -->
       <section class="page" id="page-rules">
-        <div class="card">
-          <div class="card-title">
-            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span>
-            劳务报酬（平台连续劳务）
+        <p class="hint" style="margin-bottom:12px;">本页跟随顶部「劳务报酬 / 工资薪金」切换，仅显示当前计算方式的规则与对应税率表。</p>
+
+        <!-- 劳务报酬 -->
+        <div id="rules-labor">
+          <div class="card">
+            <div class="card-title">
+              <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span>
+              劳务报酬（平台连续劳务 · 累计预扣法）
+            </div>
+            <div class="info-box">
+              <strong>适用场景：</strong>平台连续劳务（如直播、外卖、网约车等连续性收入），2025年10月1日及以后发放的结算采用<strong>累计预扣法</strong>计税（依据：国家税务总局公告2018年第61号）。<br>
+              <strong>政策切换：</strong>2025年9月及之前发放的结算按<strong>生产经营所得</strong>计算，不扣税；2025年10月及之后发放的结算适用新政策（累计预扣法）。<br>
+              <strong>计税规则：</strong>每次劳务报酬收入 × 80% 为"预扣收入额"，累计预扣收入额减去累计减除费用（5,000元/月）后，按下方「预扣率表」3%～45% 七级超额累进预扣个税。<br>
+              <strong>断月规则：</strong>平台连续劳务发放中断超过1个月，累计应归零重新起算（可选，通过「断月重置」开关启用）。<br>
+              <strong>同月多笔：</strong>同一月份多笔收入合并计税，当月减除费用只计一次；跨年请分年计算。
+            </div>
           </div>
-          <div class="info-box">
-            <strong>适用场景：</strong>平台连续劳务（如直播、外卖、网约车等连续性收入），2025年10月1日及以后发放的结算采用<strong>累计预扣法</strong>计税（依据：国家税务总局公告2018年第61号）。<br>
-            <strong>政策切换：</strong>2025年9月及之前发放的结算按<strong>生产经营所得</strong>计算，不扣税；2025年10月及之后发放的结算适用新政策（累计预扣法）。<br>
-            <strong>计税规则：</strong>每次劳务报酬收入 × 80% 为"预扣收入额"，累计预扣收入额减去累计减除费用（5,000元/月）后，按 3%～45% 七级超额累进税率预扣个税。<br>
-            <strong>断月规则：</strong>平台连续劳务发放中断超过1个月，累计应归零重新起算（可选，通过「断月重置」开关启用）。
+
+          <div class="card">
+            <div class="card-title">个人所得税预扣率表（连续劳务报酬 · 累计预扣法适用）</div>
+            <div class="scroll-x">
+              <table class="result-table" id="rules-table-labor" style="max-width:640px;"></table>
+            </div>
+            <div class="hint">预扣收入额 = 收入 × 80%；按「累计预扣收入额 − 累计减除费用（5,000 元/月）」对照上表定档。税率表与计算引擎共用同一份数据，所见即所用。</div>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-title">
-            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span>
-            工资薪金（累计预扣法）
+        <!-- 工资薪金 -->
+        <div id="rules-salary" style="display:none;">
+          <div class="card">
+            <div class="card-title">
+              <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span>
+              工资薪金（累计预扣法）
+            </div>
+            <div class="info-box">
+              <strong>适用场景：</strong>单位发放的<strong>工资薪金</strong>所得，按<strong>累计预扣法</strong>预扣预缴个税（依据：国家税务总局公告2020年第13号）。<br>
+              <strong>计税公式：</strong>累计应纳税所得额 = 累计应发工资 − 累计减除费用（5,000元/月） − 累计三险一金（个人部分） − 累计专项附加扣除；本期预扣 = 累计应纳税额 − 累计已预扣。<br>
+              <strong>税后实发：</strong>应发工资 − 个人三险一金 − 个人所得税。三险一金按「工资参数」中的基数×比例自动计算（个人与单位部分分列），比例可按所在城市调整。<br>
+              <strong>年终奖：</strong>全年一次性奖金可选<strong>单独计税</strong>（按下方「按月换算税率表」÷12 定档，每年限一次）或<strong>并入综合所得</strong>（计入发放月累计，按「预扣率表一」累计定档），系统自动对比并推荐更优方案。<br>
+              <strong>企业成本：</strong>结果同时给出单位部分社保公积金与企业用工总成本（应发工资 + 单位缴纳），比例在「政策库」中可核对调整。<br>
+              <strong>跨年规则：</strong>每年1月起，累计收入、累计已预扣税额、累计减除费用均归零重新起算；工资薪金不适用「断月重置」与 2025 年 10 月政策切换。
+            </div>
           </div>
-          <div class="info-box">
-            <strong>适用场景：</strong>单位发放的<strong>工资薪金</strong>所得，按<strong>累计预扣法</strong>预扣预缴个税（依据：国家税务总局公告2020年第13号）。<br>
-            <strong>计税公式：</strong>累计应纳税所得额 = 累计应发工资 − 累计减除费用（5,000元/月） − 累计三险一金（个人部分） − 累计专项附加扣除；本期预扣 = 累计应纳税额 − 累计已预扣。<br>
-            <strong>税后实发：</strong>应发工资 − 个人三险一金 − 个人所得税。三险一金按「工资参数」中的基数×比例自动计算（个人与单位部分分列），比例可按所在城市调整。<br>
-            <strong>年终奖：</strong>全年一次性奖金可选<strong>单独计税</strong>（奖金 ÷12 定档：应纳税额 = 奖金 × 月度税率 − 速算扣除数，每年限一次）或<strong>并入综合所得</strong>（计入发放月累计），系统自动对比并推荐更优方案；奖金命中「无效区间」（如 36,000~38,566.67）时提示避坑。<br>
-            <strong>企业成本：</strong>结果同时给出单位部分社保公积金与企业用工总成本（应发工资 + 单位缴纳），比例在「政策库」中可核对调整。<br>
-            <strong>跨年规则：</strong>每年1月起，累计收入、累计已预扣税额、累计减除费用均归零重新起算；工资薪金不适用「断月重置」与 2025 年 10 月政策切换。
-          </div>
-        </div>
 
-        <div class="card">
-          <div class="card-title">个人所得税预扣率表（居民工资薪金所得 / 连续劳务报酬）</div>
-          <div class="scroll-x">
-            <table class="result-table" style="max-width:640px;">
-              <thead><tr><th style="text-align:left;">累计应纳税所得额</th><th>税率</th><th>速算扣除数</th></tr></thead>
-              <tbody>
-                <tr><td class="label-col">不超过 36,000 元</td><td>3%</td><td>0</td></tr>
-                <tr><td class="label-col">超过 36,000 元至 144,000 元</td><td>10%</td><td>2,520</td></tr>
-                <tr><td class="label-col">超过 144,000 元至 300,000 元</td><td>20%</td><td>16,920</td></tr>
-                <tr><td class="label-col">超过 300,000 元至 420,000 元</td><td>25%</td><td>31,920</td></tr>
-                <tr><td class="label-col">超过 420,000 元至 660,000 元</td><td>30%</td><td>52,920</td></tr>
-                <tr><td class="label-col">超过 660,000 元至 960,000 元</td><td>35%</td><td>85,920</td></tr>
-                <tr><td class="label-col">超过 960,000 元</td><td>45%</td><td>181,920</td></tr>
-              </tbody>
-            </table>
+          <div class="card">
+            <div class="card-title">个人所得税预扣率表一（居民工资薪金所得 · 累计预扣法适用）</div>
+            <div class="scroll-x">
+              <table class="result-table" id="rules-table-salary" style="max-width:640px;"></table>
+            </div>
+            <div class="hint">本期应预扣税额 = 累计应纳税所得额 × 税率 − 速算扣除数 − 累计已预扣税额。税率表与计算引擎共用同一份数据，所见即所用。</div>
           </div>
-        </div>
 
-        <div class="card">
-          <div class="card-title">通用规则与示例</div>
-          <div class="info-box">
-            <strong>跨年重置：</strong>每年1月起，累计收入、累计已预扣税额、累计减除费用均归零重新起算。<br>
-            <strong>同月多笔：</strong>同一月份多笔收入合并计税，当月减除费用与三险一金只计一次。
+          <div class="card">
+            <div class="card-title">按月换算税率表（年终奖单独计税 · 按奖金 ÷12 定档）</div>
+            <div class="scroll-x">
+              <table class="result-table" id="rules-table-bonus" style="max-width:640px;"></table>
+            </div>
+            <div class="hint">应纳税额 = 全年一次性奖金全额 × 对应税率 − 速算扣除数（速算扣除数只减一次，不乘 12）；单独计税每人每年限用一次。</div>
           </div>
-          <div class="info-box success" style="margin-bottom:0;">
-            <strong>示例：</strong>月薪 10,000，自定义城市（养老 8%+医疗 2%+失业 0.5%+公积金 12%，无上下限），专项附加 1,000/月 → 三险一金 2,250；1月个税 = (10,000 − 5,000 − 2,250 − 1,000) × 3% = <strong>52.50</strong>；实发 = <strong>7,697.50</strong>。<br>
-            若参保广州（失业 0.2%、公积金 5% 档），同样月薪三险一金为 1,520，个税与实发随之不同——这正是分城市政策的意义。<br>
-            年终奖示例：36,000 单独计税 = 36,000 × 3% = <strong>1,080</strong>；若并入综合所得（月薪 1 万×12、三险一金 2,250、附加 1,000）税负增量为 2,550 → 推荐单独计税，节税 1,470。
+
+          <div class="card">
+            <div class="card-title">年终奖无效区间（多发一元、到手反而更少）</div>
+            <div class="scroll-x">
+              <table class="result-table" id="rules-table-trap" style="max-width:480px;"></table>
+            </div>
+            <div class="hint">奖金落在区间内时，税后到手反而低于恰好按下沿金额发放；系统计算时会自动提示避坑。</div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">通用规则与示例</div>
+            <div class="info-box">
+              <strong>跨年重置：</strong>每年1月起，累计收入、累计已预扣税额、累计减除费用均归零重新起算。<br>
+              <strong>同月多笔：</strong>同一月份多笔收入合并计税，当月减除费用与三险一金只计一次。
+            </div>
+            <div class="info-box success" style="margin-bottom:0;">
+              <strong>示例：</strong>月薪 10,000，自定义城市（养老 8%+医疗 2%+失业 0.5%+公积金 12%，无上下限），专项附加 1,000/月 → 三险一金 2,250；1月个税 = (10,000 − 5,000 − 2,250 − 1,000) × 3% = <strong>52.50</strong>；实发 = <strong>7,697.50</strong>。<br>
+              若参保广州（失业 0.2%、公积金 5% 档），同样月薪三险一金为 1,520，个税与实发随之不同——这正是分城市政策的意义。<br>
+              年终奖示例：36,000 单独计税 = 36,000 × 3% = <strong>1,080</strong>；若并入综合所得（月薪 1 万×12、三险一金 2,250、附加 1,000）税负增量为 2,550 → 推荐单独计税，节税 1,470。
+            </div>
           </div>
         </div>
       </section>
@@ -324,10 +359,12 @@
 <script src="js/social-insurance.js"></script>
 <script src="js/exporter.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/page-shared.js"></script>
 <script src="js/page-multi.js"></script>
 <script src="js/page-batch.js"></script>
 <script src="js/page-params.js"></script>
 <script src="js/page-policy.js"></script>
+<script src="js/page-rules.js"></script>
 <script src="js/app.js"></script>
 <script src="js/self-tests.js"></script>
 </body>

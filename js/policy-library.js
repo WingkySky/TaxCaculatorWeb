@@ -6,7 +6,7 @@
  * ============================================================ */
 (function () {
 'use strict';
-  const round2 = (...a) => TaxUtils.round2(...a);
+  const { round2 } = TaxUtils;
 
 /* ==================== 城市社保公积金政策库 ====================
  * 三层结构：城市 → 年度（含生效月区间）→ 险种（养老/医疗(含生育)/失业/工伤/公积金）
@@ -162,8 +162,6 @@ function isPolicyDataFileMissing() {
   return Object.keys(CITY_POLICY_LIBRARY).length <= 1 && !!CITY_POLICY_LIBRARY.custom;
 }
 
-/* 专项附加扣除分项默认值（金额为 2023-01 起国家统一标准） */
-
 function findCityKey(name) {
   const s = String(name || '').trim().replace(/市$/, '');
   if (!s) return null;
@@ -231,16 +229,6 @@ function clampItemBase(base, item) {
   if (item.upper != null) v = Math.min(v, item.upper);
   return v;
 }
-
-/**
- * 三险一金：个人部分 + 单位部分（月），逐险种 clamp 后乘比例
- * 社保保留到分（round2）；公积金月缴存额按惯例四舍五入取整到元（单位同规则）
- * 单位公积金比例：fund.employer 缺省时与个人同档（多数城市要求同比例缴存）
- * @returns {{pension, medical, unemployment, fund, total, fundRateUsed,
- *            employer:{pension,medical,unemployment,injury,fund,total},
- *            socialBaseRaw, fundBaseRaw}} 各险种实缴与合计（round2）；fundRateUsed 为实际生效的公积金比例；
- *            socialBaseRaw/fundBaseRaw 为参与计算（clamp 前）的原始基数，供公式导出复现
- */
 
 function libraryToRows(lib) {
   const rows = [['城市key', '城市名称', '年度', '生效起', '生效止', '年度说明', '险种', '个人比例(%)', '单位比例(%)', '基数下限', '基数上限', '公积金比例档(%)逗号分隔', '待核对']];
@@ -337,8 +325,6 @@ function rowsToLibrary(rows) {
   if (Object.keys(lib).length === 0) errors.push('未解析到任何有效数据行');
   return { library: lib, errors: errors };
 }
-
-/** 导入覆盖公共入口：替换库内容、兜底自定义、规范化（旧数据从种子回退补单位比例/工伤）、刷新联动 UI */
 
   window.PolicyLib = { CITY_POLICY_LIBRARY,FUND_RATES_STD,POLICY_LIB_STORAGE_KEY,SI_ITEMS,SI_ITEM_LABELS,_policyCache,clampItemBase,clearPolicyLibraryStorage,findCityKey,fundItem,isPolicyDataFileMissing,libraryToRows,loadPolicyLibrary,normalizePolicyLibrary,policyStorageAvailable,resolvePolicy,resolvePolicyMemo,rowsToLibrary,savePolicyLibrary,siItem };
 })();

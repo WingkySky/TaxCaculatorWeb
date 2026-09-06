@@ -5,28 +5,14 @@
  * ============================================================ */
 (function () {
 'use strict';
-  const calcBonusTaxSeparate = (...a) => TaxEngine.calcBonusTaxSeparate(...a);
-  const formatRate = (...a) => TaxUtils.formatRate(...a);
-  const findCityKey = (...a) => PolicyLib.findCityKey(...a);
-  const buildCityOptions = (...a) => PageParams.buildCityOptions(...a);
-  const round2 = (...a) => TaxUtils.round2(...a);
-  const CITY_POLICY_LIBRARY = PolicyLib.CITY_POLICY_LIBRARY;
-  const isNewPolicy = (...a) => TaxEngine.isNewPolicy(...a);
-  const calcTaxForward = (...a) => TaxEngine.calcTaxForward(...a);
-  const parseAmount = (...a) => TaxUtils.parseAmount(...a);
-  const parseFundRate = (...a) => TaxUtils.parseFundRate(...a);
-  const calcTaxReverseOldPolicy = (...a) => TaxEngine.calcTaxReverseOldPolicy(...a);
-  const TAX_STRATEGIES = TaxEngine.TAX_STRATEGIES;
-  const getExtraDeductionFor = (...a) => SocialIns.getExtraDeductionFor(...a);
-  const computeSocialInsuranceDetail = (...a) => SocialIns.computeSocialInsuranceDetail(...a);
-  const getMonthlyBracket = (...a) => TaxEngine.getMonthlyBracket(...a);
-  const formatNum = (...a) => TaxUtils.formatNum(...a);
-  const isGapMonth = (...a) => TaxEngine.isGapMonth(...a);
-  const calcTaxReverse = (...a) => TaxEngine.calcTaxReverse(...a);
-  const exportBatchExcelFormula = (...a) => Exporter.exportBatchExcelFormula(...a);
-  const resolvePolicyMemo = (...a) => PolicyLib.resolvePolicyMemo(...a);
-  const ensureXLSX = (...a) => Exporter.ensureXLSX(...a);
-  const calcTaxOldPolicy = (...a) => TaxEngine.calcTaxOldPolicy(...a);
+  const { formatRate, parseAmount, parseFundRate, round2, formatNum, downloadFile } = TaxUtils;
+  const { calcBonusTaxSeparate, calcTaxForward, calcTaxReverse, calcTaxOldPolicy, calcTaxReverseOldPolicy,
+    getMonthlyBracket, isGapMonth, isNewPolicy, TAX_STRATEGIES } = TaxEngine;
+  const { getExtraDeductionFor, computeSocialInsuranceDetail } = SocialIns;
+  const { CITY_POLICY_LIBRARY, findCityKey, resolvePolicyMemo } = PolicyLib;
+  const { ensureXLSX, exportBatchExcelFormula } = Exporter;
+  const { calcTaxByDirection, gapResetRowHTML, identityFlagsOf, incomeIOLabels,
+    insertBonusRowSorted, oldPolicyRowHTML, siEmployerTooltip, siEmployerTotal, yearResetRowHTML } = PageShared;
 
 // ==================== Batch calc ====================
 
@@ -48,7 +34,6 @@ function handleFile(e) {
 let _pendingFiles = 0;
 let _accumRows = [];
 let _accumFileCount = 0;   // 已累加的文件数
-let _isProcessing = false;  // 是否正在处理文件中
 let _accumSources = [];
 let _previewSourceId = '';
 
@@ -56,7 +41,6 @@ function handleFiles(fileList) {
   // 不再清空 _accumRows，实现分批累加
   const files = Array.from(fileList);
   _pendingFiles += files.length;
-  _isProcessing = true;
   _accumFileCount += files.length;
   updateAccumIndicator();
   files.forEach(f => processFile(f));
@@ -124,7 +108,6 @@ function readExcel(file) {
 function onFileParsed() {
   _pendingFiles--;
   if (_pendingFiles <= 0) {
-    _isProcessing = false;
     refreshBatchPreview();
     document.getElementById('file-input').value = '';
   }
@@ -223,7 +206,6 @@ function resetBatch() {
   _accumSources = [];
   _previewSourceId = '';
   _accumFileCount = 0;
-  _isProcessing = false;
   window._batchParsed = null;
   window._batchFilename = null;
   window._batchResults = null;
@@ -236,18 +218,19 @@ function resetBatch() {
   batchGapReset = true;
 }
 
-function togglePersonTable(btn) {
-  const rows = document.querySelectorAll('.person-extra');
+function toggleRows(btn, selector) {
+  const rows = document.querySelectorAll(selector);
   const hidden = rows[0]?.style.display === 'none';
   rows.forEach(r => r.style.display = hidden ? '' : 'none');
   btn.textContent = hidden ? '收起' : '展开全部';
 }
 
+function togglePersonTable(btn) {
+  toggleRows(btn, '.person-extra');
+}
+
 function togglePreviewTable(btn) {
-  const rows = document.querySelectorAll('.preview-extra');
-  const hidden = rows[0]?.style.display === 'none';
-  rows.forEach(r => r.style.display = hidden ? '' : 'none');
-  btn.textContent = hidden ? '收起' : '展开全部';
+  toggleRows(btn, '.preview-extra');
 }
 
 function parseCSV(text) {
@@ -289,6 +272,12 @@ function isGarbled(text) {
   return suspicious > 10;
 }
 
+/** Excel 日期序列号 → Date（1900 日期系统，按 1899-12-30 纪元折算） */
+function excelSerialToDate(serial) {
+  const epoch = new Date(1899, 11, 30);
+  return new Date(epoch.getTime() + serial * 86400000);
+}
+
 /**
  * 标准化月份格式为 YYYY-MM
  * 支持：2024-01, 2024/01, 2024年1月, 2024.01, 202401, 1月, Excel序列号 等
@@ -301,8 +290,7 @@ function normalizeMonth(raw) {
   if (/^\d{5,}$/.test(s)) {
     const serial = parseInt(s);
     if (serial > 30000 && serial < 60000) {
-      const epoch = new Date(1899, 11, 30);
-      const d = new Date(epoch.getTime() + serial * 86400000);
+      const d = excelSerialToDate(serial);
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     }
   }
@@ -408,8 +396,7 @@ function extractSortDateTime(raw) {
   if (/^\d{5,}(\.\d+)?$/.test(text)) {
     const serial = parseFloat(text);
     if (serial > 30000 && serial < 60000) {
-      const epoch = new Date(1899, 11, 30);
-      const d = new Date(epoch.getTime() + serial * 86400000);
+      const d = excelSerialToDate(serial);
       const yyyy = d.getFullYear();
       const mm = String(d.getMonth() + 1).padStart(2, '0');
       const dd = String(d.getDate()).padStart(2, '0');
@@ -584,23 +571,21 @@ function scoreDataCoverage(headerRow, dataRows, autoMap) {
   let identityHits = 0;
 
   sampleRows.forEach(row => {
-    const amountVal = autoMap.cols && autoMap.cols[autoMap.amountCol ?? -1] ? row[autoMap.amountCol] : '';
-    const monthVal = autoMap.cols && autoMap.cols[autoMap.monthCol ?? -1] ? row[autoMap.monthCol] : '';
-    const idVal = autoMap.cols && autoMap.cols[autoMap.idCardCol ?? -1] ? row[autoMap.idCardCol] : '';
-    const phoneVal = autoMap.cols && autoMap.cols[autoMap.phoneCol ?? -1] ? row[autoMap.phoneCol] : '';
-    const bankVal = autoMap.cols && autoMap.cols[autoMap.bankCardCol ?? -1] ? row[autoMap.bankCardCol] : '';
-    const nameVal = autoMap.cols && autoMap.cols[autoMap.nameCol ?? -1] ? row[autoMap.nameCol] : '';
+    const valOf = (colKey) => {
+      const idx = autoMap[colKey];
+      return (idx != null && autoMap.cols && autoMap.cols[idx]) ? row[idx] : '';
+    };
 
-    if (isAmountLikeNumber(amountVal)) amountHits++;
+    if (isAmountLikeNumber(valOf('amountCol'))) amountHits++;
 
-    const normalizedMonth = normalizeMonth(monthVal || '');
+    const normalizedMonth = normalizeMonth(valOf('monthCol') || '');
     if (/^\d{4}-\d{2}$/.test(normalizedMonth)) monthHits++;
 
     if (
-      /^\d{17}[\dXx]$/.test(String(idVal || '').trim()) ||
-      /^1[3-9]\d{9}$/.test(String(phoneVal || '').trim()) ||
-      /^\d{16,19}$/.test(String(bankVal || '').trim()) ||
-      String(nameVal || '').trim()
+      /^\d{17}[\dXx]$/.test(String(valOf('idCardCol') || '').trim()) ||
+      /^1[3-9]\d{9}$/.test(String(valOf('phoneCol') || '').trim()) ||
+      /^\d{16,19}$/.test(String(valOf('bankCardCol') || '').trim()) ||
+      String(valOf('nameCol') || '').trim()
     ) {
       identityHits++;
     }
@@ -1212,8 +1197,9 @@ function renderSourceSelectionHTML(sourceItems) {
       ? `${item.fileName} / ${item.sheetName || 'Sheet'}`
       : item.fileName;
     const isPreview = item.id === _previewSourceId;
+    const isActive = isPreview || item.selected;
     return `
-      <div style="padding:12px;border:1px solid ${isPreview ? 'var(--t-primary)' : (item.selected ? 'var(--t-primary)' : 'var(--t-border)')};border-radius:8px;background:${isPreview ? 'var(--t-primary-bg)' : (item.selected ? 'var(--t-primary-bg)' : 'var(--t-bg-header)')};">
+      <div style="padding:12px;border:1px solid ${isActive ? 'var(--t-primary)' : 'var(--t-border)'};border-radius:8px;background:${isActive ? 'var(--t-primary-bg)' : 'var(--t-bg-header)'};">
         <div style="display:flex;gap:10px;align-items:flex-start;">
           <input type="checkbox" ${item.selected ? 'checked' : ''} onchange='toggleBatchSource(${JSON.stringify(item.id)}, this.checked)' style="margin-top:2px;accent-color:var(--t-primary);">
           <div style="flex:1;min-width:0;">
@@ -1274,16 +1260,9 @@ function selectOnlySource(sourceId) {
 }
 
 function onMappingChange(sel) {
-  const ci = sel.dataset.col;
-  const type = sel.value;
   const state = window._colMappingState;
-  if (state) state.mapping.cols[ci].type = type;
-  const card = sel.parentElement;
-  if (type) {
-    card.classList.add('selected');
-  } else {
-    card.classList.remove('selected');
-  }
+  if (state) state.mapping.cols[sel.dataset.col].type = sel.value;
+  sel.parentElement.classList.toggle('selected', !!sel.value);
 }
 
 function confirmColumnMapping() {
@@ -1305,6 +1284,38 @@ function confirmColumnMapping() {
 
   // 解析并展示预览
   processWithMapping(state.selectedRows || state.dataRows, colMap, state.filename, state.sourceItems);
+}
+
+/** 人员唯一标识：有身份证优先用身份证，否则综合姓名/电话/银行卡 */
+function buildPersonKey({ name, idCard, phone, bankCard }) {
+  if (idCard) return 'ID:' + idCard;
+  const parts = [];
+  if (name && name !== '默认') parts.push('N:' + name);
+  if (phone) parts.push('P:' + phone);
+  if (bankCard) parts.push('B:' + bankCard);
+  return parts.length > 0 ? parts.join('|') : '默认';
+}
+
+/** 按 personKey 分组并合并身份信息（取最长非空值），返回 { personKeys, personsMap } */
+function groupPersons(parsed) {
+  const personsMap = {};
+  parsed.forEach(d => {
+    if (!personsMap[d.personKey]) {
+      personsMap[d.personKey] = { name: d.person, idCard: d.idCard, phone: d.phone, bankCard: d.bankCard, records: [] };
+    }
+    const g = personsMap[d.personKey];
+    if (d.idCard && d.idCard.length > g.idCard.length) g.idCard = d.idCard;
+    if (d.phone && d.phone.length > g.phone.length) g.phone = d.phone;
+    if (d.bankCard && d.bankCard.length > g.bankCard.length) g.bankCard = d.bankCard;
+    if (d.person && d.person !== '默认' && (!g.name || g.name === '默认')) g.name = d.person;
+    g.records.push(d);
+  });
+  const personKeys = Object.keys(personsMap).sort((a, b) => {
+    const na = personsMap[a].name || a;
+    const nb = personsMap[b].name || b;
+    return na.localeCompare(nb);
+  });
+  return { personKeys, personsMap };
 }
 
 /**
@@ -1359,16 +1370,7 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
         month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       }
 
-      let personKey = '';
-      if (idCard) {
-        personKey = 'ID:' + idCard;
-      } else {
-        const parts = [];
-        if (name && name !== '默认') parts.push('N:' + name);
-        if (phone) parts.push('P:' + phone);
-        if (bankCard) parts.push('B:' + bankCard);
-        personKey = parts.length > 0 ? parts.join('|') : '默认';
-      }
+      const personKey = buildPersonKey({ name, idCard, phone, bankCard });
 
       if (amount > 0 && rowHasUsableIdentity({ name, idCard, phone, bankCard })) {
         const monthRaw = rowColMap.month != null ? row[rowColMap.month] : '';
@@ -1435,219 +1437,9 @@ function processWithMapping(dataRows, colMap, filename, sourceItems = []) {
     parsed = parseRowsWithMap(dataRows, colMap);
   }
 
-  // 按人分组
-  const personsMap = {};
-  parsed.forEach(d => {
-    if (!personsMap[d.personKey]) {
-      personsMap[d.personKey] = { name: d.person, idCard: d.idCard, phone: d.phone, bankCard: d.bankCard, records: [] };
-    }
-    const g = personsMap[d.personKey];
-    if (d.idCard && d.idCard.length > g.idCard.length) g.idCard = d.idCard;
-    if (d.phone && d.phone.length > g.phone.length) g.phone = d.phone;
-    if (d.bankCard && d.bankCard.length > g.bankCard.length) g.bankCard = d.bankCard;
-    if (d.person && d.person !== '默认' && (!g.name || g.name === '默认')) g.name = d.person;
-    g.records.push(d);
-  });
-
-  const personKeys = Object.keys(personsMap).sort((a, b) => {
-    const na = personsMap[a].name || a;
-    const nb = personsMap[b].name || b;
-    return na.localeCompare(nb);
-  });
+  const { personKeys, personsMap } = groupPersons(parsed);
 
   window._batchParsed = { parsed, personKeys, personsMap, sourceItems };
-  window._batchFilename = filename;
-  showBatchPreview(parsed, personKeys, personsMap, filename);
-}
-
-function processBatch(rows, filename) {
-  if (rows.length < 2) return alert('表格数据为空或只有表头');
-
-  // 多文件合并时，去除中间出现的表头行（关键字行）
-  const headerPattern = /月份|month|收入|income|金额|amount|姓名|name|身份证|电话|phone|手机|银行|bank|卡号/i;
-  rows = rows.filter((row, i) => {
-    if (i === 0) return true; // 保留第一行（用于表头检测）
-    return !row.some(cell => headerPattern.test(cell || ''));
-  });
-
-  // 重置旧数据和旧结果
-  window._batchParsed = null;
-  window._batchFilename = null;
-  window._batchResults = null;
-  batchDirection = 'forward';
-  batchGapReset = true;
-  document.getElementById('batch-result').style.display = 'none';
-  document.getElementById('batch-preview').style.display = 'none';
-
-  // Detect header
-  const firstRow = rows[0];
-  const hasHeader = firstRow.some(cell =>
-    /月份|month|收入|income|金额|amount|姓名|name|id|身份证|电话|phone|手机|银行|bank|卡号/i.test(cell)
-  );
-  const dataRows = hasHeader ? rows.slice(1) : rows;
-
-  // 如果有表头，按表头关键字映射列
-  let colMap = null;
-  if (hasHeader) {
-    colMap = {};
-    const nameCandidates = [];
-    firstRow.forEach((cell, i) => {
-      const c = (cell || '').toLowerCase();
-      const cellStr = String(cell || '').trim();
-      
-      if (/月份|month|时间|日期|date/.test(c) && colMap.month == null) colMap.month = i;
-      else if (/金额|amount|收入|income|报酬|pay/.test(c) && colMap.amount == null) colMap.amount = i;
-      else if (/身份证|id\s*card|idcard/.test(c) && colMap.idCard == null) colMap.idCard = i;
-      else if (/电话|phone|手机|mobile/.test(c) && colMap.phone == null) colMap.phone = i;
-      else if (/银行|bank|卡号|bankcard/.test(c) && colMap.bankCard == null) colMap.bankCard = i;
-      // 收集姓名候选人，后面统一选择最佳的
-      else if (/姓名|员工|人员|person/.test(c)) {
-        // 排除公司名称
-        if (!/(公司|单位|企业|机构|部门|集体|组织|集团)/i.test(cellStr)) {
-          nameCandidates.push({ i, cell: cellStr });
-        }
-      }
-    });
-    
-    // 选择最佳的姓名列
-    if (nameCandidates.length > 0 && colMap.name == null) {
-      // 优先选择包含"姓名"、"员工"的列
-      let best = null;
-      for (const cand of nameCandidates) {
-        if (!best || /姓名|员工/.test(cand.cell)) {
-          best = cand;
-          if (/姓名/.test(cand.cell)) break; // 找到"姓名"直接选
-        }
-      }
-      if (best) colMap.name = best.i;
-    }
-  }
-
-  // 如果无表头，自动探测列类型
-  let detectedFormat = null; // 'new' or 'old'
-  if (!hasHeader && dataRows.length > 0) {
-    const firstData = dataRows[0].filter(c => c !== '');
-    const hasIdCard = firstData.some(c => /^\d{17}[\dXx]$/.test(c));
-    const hasPhone = firstData.some(c => /^1[3-9]\d{9}$/.test(c));
-    const hasBank = firstData.some(c => /^\d{16,19}$/.test(c) && !/^1[3-9]/.test(c) && !/^\d{17}[\dXx]$/.test(c));
-    if (hasIdCard || hasPhone || hasBank) {
-      detectedFormat = 'new';
-    }
-  }
-
-  // 第一步：解析所有行
-  const parsed = [];
-  dataRows.forEach(row => {
-    if (isSummaryLikeRow(row)) return;
-    const allCols = row; // 保留所有列（含空列），按索引取值
-    let month = '', amount = 0, name = '默认', idCard = '', phone = '', bankCard = '';
-
-    if (colMap) {
-      // 有表头：按映射取值
-      month = colMap.month != null ? normalizeMonthWithHint(allCols[colMap.month] || '', '') : '';
-      amount = colMap.amount != null ? parseAmount(allCols[colMap.amount]) : 0;
-      name = colMap.name != null ? sanitizeName(allCols[colMap.name]) : '';
-      idCard = colMap.idCard != null ? sanitizeIdCard(allCols[colMap.idCard]) : '';
-      phone = colMap.phone != null ? sanitizePhone(allCols[colMap.phone]) : '';
-      bankCard = colMap.bankCard != null ? sanitizeBankCard(allCols[colMap.bankCard]) : '';
-    } else if (detectedFormat === 'new') {
-      // 无表头但检测到新格式：按内容自动识别
-      allCols.forEach(c => {
-        const v = (c || '').trim();
-        if (!v) return;
-        if (sanitizeIdCard(v) && !idCard) idCard = sanitizeIdCard(v);
-        else if (sanitizePhone(v) && !phone) phone = sanitizePhone(v);
-        else if (sanitizeBankCard(v) && !bankCard) bankCard = sanitizeBankCard(v);
-        else {
-          const nm = normalizeMonth(v);
-          if (nm !== v || /^\d{4}[-\/]/.test(v) || /年|月/.test(v) || /^\d{5,}$/.test(v) || /^[A-Za-z]{3}[-\/]/.test(v)) {
-            if (!month) month = nm;
-          } else if (!isNaN(parseAmount(v)) && parseAmount(v) > 0 && !amount) {
-            amount = parseAmount(v);
-          } else if (!name || name === '默认') {
-            name = sanitizeName(v) || name;
-          }
-        }
-      });
-    } else {
-      // 兼容旧格式
-      const cols = allCols.filter(c => c !== '');
-      if (cols.length >= 3) {
-        month = normalizeMonth(cols[0]);
-        amount = parseAmount(cols[1]);
-        name = sanitizeName(cols[2]) || '默认';
-      } else if (cols.length === 2) {
-        const first = cols[0];
-        const normalized = normalizeMonth(first);
-        const isMonth = normalized !== first || /^\d{4}[-\/]/.test(first) || /年|月/.test(first) || /^\d{5,}$/.test(first) || /^[A-Za-z]{3}[-\/]/.test(first);
-        if (isMonth && normalized !== '-') {
-          month = normalized;
-          amount = parseAmount(cols[1]);
-        } else {
-          amount = parseAmount(cols[0]);
-          name = sanitizeName(cols[1]) || '默认';
-        }
-      } else if (cols.length === 1) {
-        amount = parseAmount(cols[0]);
-      }
-    }
-
-    if (!name) name = '默认';
-
-    // 构建人员唯一标识：有身份证优先用身份证，否则综合多要素
-    let personKey = '';
-    if (idCard) {
-      personKey = 'ID:' + idCard;
-    } else {
-      const parts = [];
-      if (name && name !== '默认') parts.push('N:' + name);
-      if (phone) parts.push('P:' + phone);
-      if (bankCard) parts.push('B:' + bankCard);
-      personKey = parts.length > 0 ? parts.join('|') : '默认';
-    }
-
-    if (amount > 0 && rowHasUsableIdentity({ name, idCard, phone, bankCard })) {
-      const monthRaw = colMap && colMap.month != null ? allCols[colMap.month] : '';
-      parsed.push({
-        month: month || '-',
-        monthRaw,
-        sortTime: extractSortDateTime(monthRaw),
-        amount,
-        person: name,
-        idCard,
-        phone,
-        bankCard,
-        personKey,
-        sourceRowIndex: row._sourceRowIndex ?? 0
-      });
-    }
-  });
-
-  // 第二步：按 personKey 分组排序
-  const personsMap = {};
-  parsed.forEach(d => {
-    if (!personsMap[d.personKey]) {
-      personsMap[d.personKey] = {
-        name: d.person, idCard: d.idCard, phone: d.phone, bankCard: d.bankCard, records: []
-      };
-    }
-    // 取最长非空值作为该组的标识
-    const g = personsMap[d.personKey];
-    if (d.idCard && d.idCard.length > g.idCard.length) g.idCard = d.idCard;
-    if (d.phone && d.phone.length > g.phone.length) g.phone = d.phone;
-    if (d.bankCard && d.bankCard.length > g.bankCard.length) g.bankCard = d.bankCard;
-    if (d.person && d.person !== '默认' && (!g.name || g.name === '默认')) g.name = d.person;
-    g.records.push(d);
-  });
-
-  const personKeys = Object.keys(personsMap).sort((a, b) => {
-    const na = personsMap[a].name || a;
-    const nb = personsMap[b].name || b;
-    return na.localeCompare(nb);
-  });
-
-  // 第三步：存储解析结果，展示预览
-  window._batchParsed = { parsed, personKeys, personsMap };
   window._batchFilename = filename;
   showBatchPreview(parsed, personKeys, personsMap, filename);
 }
@@ -1670,9 +1462,7 @@ function showBatchPreview(parsed, personKeys, personsMap, filename) {
     : '未识别月份';
 
   // 检测哪些身份列有数据
-  const hasIdCard = parsed.some(d => d.idCard);
-  const hasPhone = parsed.some(d => d.phone);
-  const hasBankCard = parsed.some(d => d.bankCard);
+  const { hasIdCard, hasPhone, hasBankCard } = identityFlagsOf(parsed);
 
   // 按人统计
   const personStats = personKeys.map(key => {
@@ -1797,22 +1587,7 @@ function showBatchPreview(parsed, personKeys, personsMap, filename) {
             <span class="slider"></span>
           </label>
         </div>` : `
-        <div class="salary-params-grid" style="margin-bottom:12px;">
-          <div class="sp-field">
-            <label>整批参保城市（表格有「城市」列时按行内为准）</label>
-            <select id="batch-city" onchange="TaxState.batchCityId=this.value;">
-              <option value="">跟随「工资参数」中的城市</option>
-              ${buildCityOptions('', true)}
-            </select>
-          </div>
-          <div class="sp-field" style="display:flex;align-items:flex-end;padding-bottom:4px;">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--t-text);">
-              <input type="checkbox" onchange="TaxState.batchGrossAsBase=this.checked;" style="accent-color:var(--t-primary);">
-              无基数时按应发工资作基数
-            </label>
-          </div>
-        </div>
-        <div style="font-size:12px;color:var(--t-text-2);margin-bottom:16px;">三险一金按行内城市/整批城市政策自动计算：行内基数（按城市上下限 clamp）> 全局基数${incomeType === 'salary' ? ' > 应发工资作基数（勾选后）' : ''}；公积金比例按 行内「公积金比例」列 > 「工资参数」档位；均无基数则记 0 并标注。</div>`}
+        <div style="font-size:12px;color:var(--t-text-2);margin-bottom:16px;">三险一金按行内城市/整批城市政策自动计算：行内基数（按城市上下限 clamp）&gt; 整批设置/全局基数 &gt; 应发工资作基数（勾选后）；公积金比例按 行内「公积金比例」列 &gt; 「工资参数」档位；均无基数则记 0 并标注。整批城市与「按应发工资作基数」在上方「全局兜底设置」中配置。</div>`}
         <button class="btn btn-primary" onclick="PageBatch.runBatchCalc()" style="width:100%;padding:12px;font-size:15px;"> 开始计算</button>
       </div>
     </div>
@@ -1939,12 +1714,7 @@ function runBatchSalaryPass(group, records, bonusRecs) {
     }
 
     const salaryCtx = { socialInsurance: isFirstOfMonth ? si : 0, extraDeduction: isFirstOfMonth ? extra : 0 };
-    let r;
-    if (batchDirection === 'forward') {
-      r = calcTaxForward(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx);
-    } else {
-      r = calcTaxReverse(d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx);
-    }
+    const r = calcTaxByDirection(batchDirection, d.amount, cumIncome, cumDeduction, cumTax, TAX_STRATEGIES.salary, salaryCtx);
     cumIncome = r.cumIncome;
     cumTax = r.cumTaxDue;
 
@@ -2018,16 +1788,8 @@ function makeBatchBonusSeparateRow(group, b, rows) {
   };
 }
 
-/** 把年终奖独立行按月份序插入（排在发放月工资行之后） */
-function insertBatchBonusRowSorted(rows, row) {
-  let idx = 0;
-  rows.forEach((r, i) => { if ((r.month || '') <= row.month) idx = i + 1; });
-  rows.splice(idx, 0, row);
-}
-
-/**
- * 批量·单人工资薪金入口：有年终奖时按「人 × 年」对比单独计税 vs 并入综合所得并择优；
- * 反算方向下并入对比不适用，年终奖一律单独计税独立成行。
+/** 批量·单人工资薪金入口：有年终奖时按「人 × 年」对比单独计税 vs 并入综合所得并择优；
+ *  反算方向下并入对比不适用，年终奖一律单独计税独立成行。
  */
 function runBatchSalaryPerson(group, records) {
   const bonusRecs = records.filter(r => (Number(r.bonus) || 0) > 0);
@@ -2036,7 +1798,7 @@ function runBatchSalaryPerson(group, records) {
   }
   if (batchDirection === 'reverse') {
     const rows = runBatchSalaryPass(group, records, []);
-    bonusRecs.forEach(b => insertBatchBonusRowSorted(rows, makeBatchBonusSeparateRow(group, b, rows)));
+    bonusRecs.forEach(b => insertBonusRowSorted(rows, makeBatchBonusSeparateRow(group, b, rows)));
     return rows;
   }
   /* 正算方向：按年对比两方案（跨年累计互不影响，按年分别择优） */
@@ -2073,7 +1835,7 @@ function runBatchSalaryPerson(group, records) {
   const combinedRecs = bonusRecs.filter(b => b._plan && b._plan.strategy === 'combined');
   const rows = combinedRecs.length ? runBatchSalaryPass(group, records, combinedRecs) : baseRows;
   bonusRecs.filter(b => b._plan && b._plan.strategy === 'separate')
-    .forEach(b => insertBatchBonusRowSorted(rows, makeBatchBonusSeparateRow(group, b, rows)));
+    .forEach(b => insertBonusRowSorted(rows, makeBatchBonusSeparateRow(group, b, rows)));
   return rows;
 }
 
@@ -2088,9 +1850,7 @@ function runBatchCalc() {
   const filename = window._batchFilename || '批量数据';
 
   // 检测哪些身份列有数据
-  const hasIdCard = parsed.some(d => d.idCard);
-  const hasPhone = parsed.some(d => d.phone);
-  const hasBankCard = parsed.some(d => d.bankCard);
+  const identityFlags = identityFlagsOf(parsed);
 
   /* 逐笔计税，根据月份判断政策类型 */
   const allResults = [];
@@ -2154,12 +1914,7 @@ function runBatchCalc() {
           cumDeduction += 5000;
         }
 
-        let r;
-        if (batchDirection === 'forward') {
-          r = calcTaxForward(d.amount, cumIncome, cumDeduction, cumTax);
-        } else {
-          r = calcTaxReverse(d.amount, cumIncome, cumDeduction, cumTax);
-        }
+        const r = calcTaxByDirection(batchDirection, d.amount, cumIncome, cumDeduction, cumTax);
         cumIncome = r.cumIncome;
         cumTax = r.cumTaxDue;
 
@@ -2175,13 +1930,8 @@ function runBatchCalc() {
         });
       } else {
         // 旧政策：按次预扣，不累计
-        let r;
-        if (batchDirection === 'forward') {
-          r = calcTaxOldPolicy(d.amount);
-        } else {
-          r = calcTaxReverseOldPolicy(d.amount);
-        }
-        
+        const r = batchDirection === 'forward' ? calcTaxOldPolicy(d.amount) : calcTaxReverseOldPolicy(d.amount);
+
         // 如果之前是新政策，现在切换到旧政策，需要重置累计
         if (lastMonth && isNewPolicy(lastMonth)) {
           cumIncome = 0;
@@ -2204,7 +1954,7 @@ function runBatchCalc() {
     });
   });
 
-  renderBatchResults(allResults, filename, personKeys, personsMap, { hasIdCard, hasPhone, hasBankCard });
+  renderBatchResults(allResults, filename, personKeys, personsMap, identityFlags);
 }
 
 function renderBatchResults(results, filename, personKeys, personsMap, identityFlags) {
@@ -2214,18 +1964,10 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
   const totalPre = results.reduce((s, r) => s + r.preTax, 0);
   const totalTax = results.reduce((s, r) => s + r.currentTax, 0);
   const totalPost = results.reduce((s, r) => s + r.postTax, 0);
-  const totalEmployer = results.reduce((s, r) => s + (r._siDetail && r._siDetail.employer ? r._siDetail.employer.total : 0), 0);
+  const totalEmployer = results.reduce((s, r) => s + siEmployerTotal(r._siDetail), 0);
 
   const isSalary = incomeType === 'salary';
-  const directionLabel = isSalary
-    ? (batchDirection === 'forward' ? '应发工资 → 实发工资' : '实发工资 → 应发工资')
-    : (batchDirection === 'forward' ? '税前收入 → 税后收入' : '税后收入 → 税前收入');
-  const preColLabel = isSalary
-    ? (batchDirection === 'forward' ? '应发工资' : '实发工资（已知）')
-    : (batchDirection === 'forward' ? '税前收入' : '税后收入（已知）');
-  const postColLabel = isSalary
-    ? (batchDirection === 'forward' ? '实发工资' : '应发工资（反算）')
-    : (batchDirection === 'forward' ? '税后收入' : '税前收入（反算）');
+  const { dirLabel: directionLabel, preLabel: preColLabel, postLabel: postColLabel } = incomeIOLabels(batchDirection);
 
   const { hasIdCard, hasPhone, hasBankCard } = identityFlags || {};
 
@@ -2260,7 +2002,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
     let personPre = 0, personTax = 0, personPost = 0, personEmployer = 0;
     rows.forEach(r => {
       personPre += r.preTax; personTax += r.currentTax; personPost += r.postTax;
-      personEmployer += (r._siDetail && r._siDetail.employer ? r._siDetail.employer.total : 0);
+      personEmployer += siEmployerTotal(r._siDetail);
     });
 
     // 构建身份信息标签
@@ -2280,7 +2022,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
       const yRows = yearGroups[yr];
       const gapColspan = (isSalary ? 14 : 9) + (hasIdCard?1:0) + (hasPhone?1:0) + (hasBankCard?1:0);
       const yearSep = yi > 0
-        ? `<tr style="background:var(--t-primary-bg);"><td colspan="${gapColspan}" style="text-align:center;padding:10px;font-weight:700;color:var(--t-primary);letter-spacing:1px;">── ${yr} 年度累计重新起算 ──</td></tr>`
+        ? yearResetRowHTML(gapColspan, yr)
         : '';
 
       const dataRows = yRows.map(r => {
@@ -2290,13 +2032,9 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
         if (hasPhone) extraCols += `<td style="font-size:12px;color:var(--t-text-2);">${r.phone || '-'}</td>`;
         if (hasBankCard) extraCols += `<td style="font-size:12px;color:var(--t-text-2);">${r.bankCard || '-'}</td>`;
 
-        const gapMarker = r._isGap
-          ? `<tr style="background:var(--t-error-bg);"><td colspan="${gapColspan}" style="text-align:center;padding:8px;font-weight:600;color:var(--t-error);font-size:12px;"> 断月重置：${r.month} 与上月间隔超过1个月，累计归零重新起算</td></tr>`
-          : '';
+        const gapMarker = r._isGap ? gapResetRowHTML(gapColspan, r.month) : '';
 
-        const oldPolicyMarker = r._isOldPolicy
-          ? `<tr style="background:var(--t-warning-bg);"><td colspan="${gapColspan}" style="text-align:center;padding:8px;font-weight:600;color:var(--t-warning);font-size:12px;">旧政策：${r.month} 按生产经营所得计算，不扣税（2025年10月1日前）</td></tr>`
-          : '';
+        const oldPolicyMarker = r._isOldPolicy ? oldPolicyRowHTML(gapColspan, r.month) : '';
 
         const cityWarnMarker = (r._cityUnknown || r._yearFallback)
           ? `<tr style="background:var(--t-warning-bg);"><td colspan="${gapColspan}" style="text-align:center;padding:8px;font-weight:600;color:var(--t-warning);font-size:12px;"> ${r.month}：${r._cityUnknown ? `城市「${r.city}」未识别，已回退全局城市；` : ''}${r._yearFallback ? '政策年度未精确匹配，已用最新年度' : ''}</td></tr>`
@@ -2305,9 +2043,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
         const siTitle = r._siDetail
           ? ` title="养老 ¥${formatNum(r._siDetail.pension)} / 医疗 ¥${formatNum(r._siDetail.medical)} / 失业 ¥${formatNum(r._siDetail.unemployment)} / 公积金 ${formatRate(r._siDetail.fundRateUsed)} ¥${formatNum(r._siDetail.fund)}"`
           : (r._siMissing ? ' title="行内与全局均未设置基数，三险一金按 0 计算"' : '');
-        const erTitle = r._siDetail && r._siDetail.employer
-          ? ` title="单位养老 ¥${formatNum(r._siDetail.employer.pension)} / 医疗 ¥${formatNum(r._siDetail.employer.medical)} / 失业 ¥${formatNum(r._siDetail.employer.unemployment)} / 工伤 ¥${formatNum(r._siDetail.employer.injury)} / 公积金 ¥${formatNum(r._siDetail.employer.fund)}"`
-          : '';
+        const erTitle = siEmployerTooltip(r._siDetail);
         const isBonusRow = !!r._isBonus;
         const bonusSep = isBonusRow && r._bonusSeparate;
         const cumCell = (v) => (bonusSep ? '—' : `¥${formatNum(v)}`);
@@ -2319,10 +2055,10 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
             ${isSalary ? `<td>${r.cityName || '-'}</td><td style="font-size:12px;color:var(--t-text-2);">${r.policyYearLabel || '-'}</td>` : ''}
             ${extraCols}
             <td>¥${formatNum(batchDirection === 'forward' ? r.preTax : r.postTax)}</td>
-            ${isSalary ? `<td${siTitle}${r._siMissing ? ' style="color:var(--t-warning);"' : ''}>¥${formatNum(r.socialInsurance || 0)}${r._siMissing ? '' : ''}</td><td${erTitle}>¥${formatNum(r._siDetail && r._siDetail.employer ? r._siDetail.employer.total : 0)}</td><td>¥${formatNum(r.extraDeduction || 0)}</td>` : ''}
+            ${isSalary ? `<td${siTitle}${r._siMissing ? ' style="color:var(--t-warning);"' : ''}>¥${formatNum(r.socialInsurance || 0)}</td><td${erTitle}>¥${formatNum(siEmployerTotal(r._siDetail))}</td><td>¥${formatNum(r.extraDeduction || 0)}</td>` : ''}
             <td>${cumCell(r.cumIncome)}</td>
             <td>${cumCell(r.cumDeduction)}</td>
-            <td>${(r.rate * 100)}%<div style="font-size:10px;color:var(--t-text-2);">速算 ${formatNum(r.quick)}${isSalary && isBonusRow ? '（÷12）' : ''}</div></td>
+            <td>${formatRate(r.rate)}<div style="font-size:10px;color:var(--t-text-2);">速算 ${formatNum(r.quick)}${isSalary && isBonusRow ? '（÷12）' : ''}</div></td>
             <td class="tax-col">¥${formatNum(r.currentTax)}</td>
             <td class="highlight">¥${formatNum(batchDirection === 'forward' ? r.postTax : r.preTax)}</td>
             <td>${isSalary ? (isBonusRow ? `年终奖·${r._bonusStrategy === 'combined' ? '并入综合所得' : '单独计税'}` : '累计预扣') : (r._isOldPolicy ? '旧政策' : '新政策')}</td>
@@ -2418,7 +2154,6 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
       ${isSalary ? `<button class="btn btn-green" style="padding:6px 14px;font-size:12px;" onclick="PageBatch.exportBatchExcelFormula()"> 导出 Excel（公式明细）</button>` : ''}
       <button class="btn btn-green" style="padding:6px 14px;font-size:12px;" onclick="PageBatch.exportBatchCSV()"> 导出结果 CSV</button>
     </div>
-    </div>
     ${personBlocks}
   `;
 
@@ -2429,17 +2164,10 @@ function exportBatchCSV() {
   if (!window._batchResults) return;
   const results = window._batchResults;
   const isSalary = incomeType === 'salary';
-  const preLabel = isSalary
-    ? (batchDirection === 'forward' ? '应发工资' : '实发工资（已知）')
-    : (batchDirection === 'forward' ? '税前收入' : '税后收入（已知）');
-  const postLabel = isSalary
-    ? (batchDirection === 'forward' ? '实发工资' : '应发工资（反算）')
-    : (batchDirection === 'forward' ? '税后收入' : '税前收入（反算）');
+  const { preLabel, postLabel } = incomeIOLabels(batchDirection);
 
   // 检测哪些身份列有数据
-  const hasIdCard = results.some(r => r.idCard);
-  const hasPhone = results.some(r => r.phone);
-  const hasBankCard = results.some(r => r.bankCard);
+  const { hasIdCard, hasPhone, hasBankCard } = identityFlagsOf(results);
 
   // 按人 → 月排序后导出
   const sorted = [...results].sort((a, b) => {
@@ -2467,14 +2195,14 @@ function exportBatchCSV() {
     const inAmt = round2(batchDirection === 'forward' ? r.preTax : r.postTax);
     const outAmt = round2(batchDirection === 'forward' ? r.postTax : r.preTax);
     const bonusSep = r._isBonus && r._bonusSeparate;
-    const erTotal = (r._siDetail && r._siDetail.employer) ? r._siDetail.employer.total : 0;
+    const erTotal = siEmployerTotal(r._siDetail);
     if (isSalary) {
       const method = r._isBonus
         ? `年终奖(${r._bonusStrategy === 'combined' ? '并入综合所得' : '单独计税'})`
         : `累计预扣${r._siMissing ? '(三险一金未设置)' : ''}${r._cityUnknown ? '(城市未识别)' : ''}${r._yearFallback ? '(年度未匹配)' : ''}`;
-      cols += `,"${r.month}","${r.cityName || ''}","${r.policyYearLabel || ''}",${inAmt},${round2(r.socialInsurance || 0)},${round2(erTotal)},${r._siDetail ? formatRate(r._siDetail.fundRateUsed) : ''},${round2(r.extraDeduction || 0)},${bonusSep ? '' : round2(r.cumIncome)},${bonusSep ? '' : round2(r.cumDeduction || 0)},${bonusSep ? '' : round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${outAmt},${round2(inAmt + erTotal)},${method}`;
+      cols += `,"${r.month}","${r.cityName || ''}","${r.policyYearLabel || ''}",${inAmt},${round2(r.socialInsurance || 0)},${round2(erTotal)},${r._siDetail ? formatRate(r._siDetail.fundRateUsed) : ''},${round2(r.extraDeduction || 0)},${bonusSep ? '' : round2(r.cumIncome)},${bonusSep ? '' : round2(r.cumDeduction || 0)},${bonusSep ? '' : round2(r.taxableIncome)},${formatRate(r.rate)},${round2(r.quick || 0)},${round2(r.currentTax)},${outAmt},${round2(inAmt + erTotal)},${method}`;
     } else {
-      cols += `,"${r.month}",${inAmt},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${(r.rate*100)}%,${round2(r.quick || 0)},${round2(r.currentTax)},${outAmt},${r._isOldPolicy ? '旧政策' : '新政策'}`;
+      cols += `,"${r.month}",${inAmt},${round2(r.withholdingIncome)},${round2(r.cumIncome)},${round2(r.cumDeduction || 0)},${round2(r.taxableIncome)},${formatRate(r.rate)},${round2(r.quick || 0)},${round2(r.currentTax)},${outAmt},${r._isOldPolicy ? '旧政策' : '新政策'}`;
     }
     return cols;
   }).join('\n');
@@ -2483,5 +2211,5 @@ function exportBatchCSV() {
 }
 
 
-  window.PageBatch = { COL_KEYWORDS,COL_TYPE_LABELS,_accumFileCount,_accumRows,_accumSources,_isProcessing,_pendingFiles,_previewSourceId,analyzeSheet,analyzeWorkbookSheets,buildBatchSourceLabel,buildMonthFromParts,buildSourceItem,collectPreviewRows,collectSelectedRows,compareMonth,confirmColumnMapping,detectColumnMapping,exportBatchCSV,extractMonthHint,extractMonthHintFromRows,extractSortDateTime,extractYearHint,getAmountColumnScore,getColumnMatchScore,getSheetNameScore,handleFile,handleFiles,insertBatchBonusRowSorted,isAmountHeaderExcluded,isAmountLikeNumber,isGarbled,isHeaderContinuation,isSummaryLikeRow,isSummaryLikeText,makeBatchBonusSeparateRow,makeBatchBonusSynthRec,mergeHeaderRows,normalizeMonth,normalizeMonthWithHint,onFileParsed,onMappingChange,parseCSV,processBatch,processFile,processWithMapping,readExcel,refreshBatchPreview,renderBatchResults,renderSourceSelectionHTML,resetBatch,rowHasStrongIdentity,rowHasUsableIdentity,runBatchCalc,runBatchSalaryPass,runBatchSalaryPerson,sanitizeBankCard,sanitizeIdCard,sanitizeName,sanitizePhone,scoreDataCoverage,selectOnlySource,setPreviewSource,showBatchPreview,showColumnMappingUI,smartDetectTable,tagSourceRows,toggleBatchSource,togglePersonTable,togglePreviewTable,updateAccumIndicator,uploadArea };
+  window.PageBatch = { COL_KEYWORDS,COL_TYPE_LABELS,_accumFileCount,_accumRows,_accumSources,_pendingFiles,_previewSourceId,analyzeSheet,analyzeWorkbookSheets,buildBatchSourceLabel,buildMonthFromParts,buildSourceItem,collectPreviewRows,collectSelectedRows,compareMonth,confirmColumnMapping,detectColumnMapping,exportBatchCSV,exportBatchExcelFormula,extractMonthHint,extractMonthHintFromRows,extractSortDateTime,extractYearHint,getAmountColumnScore,getColumnMatchScore,getSheetNameScore,handleFile,handleFiles,isAmountHeaderExcluded,isAmountLikeNumber,isGarbled,isHeaderContinuation,isSummaryLikeRow,isSummaryLikeText,makeBatchBonusSeparateRow,makeBatchBonusSynthRec,mergeHeaderRows,normalizeMonth,normalizeMonthWithHint,onFileParsed,onMappingChange,parseCSV,processFile,processWithMapping,readExcel,refreshBatchPreview,renderBatchResults,renderSourceSelectionHTML,resetBatch,rowHasStrongIdentity,rowHasUsableIdentity,runBatchCalc,runBatchSalaryPass,runBatchSalaryPerson,sanitizeBankCard,sanitizeIdCard,sanitizeName,sanitizePhone,scoreDataCoverage,selectOnlySource,setPreviewSource,showBatchPreview,showColumnMappingUI,smartDetectTable,tagSourceRows,toggleBatchSource,togglePersonTable,togglePreviewTable,updateAccumIndicator,uploadArea };
 })();

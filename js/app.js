@@ -1,6 +1,6 @@
 /* ============================================================
  * app.js — App 应用壳
- * 职责：hash 路由（五个页面）、侧边栏（折叠/移动端抽屉）、
+ * 职责：hash 路由（四个页面）、侧边栏（折叠/移动端抽屉）、
  *       亮暗主题切换、所得类型全局切换、初始化引导。
  * 对外接口：window.App。依赖：全部模块（最后加载）。
  * ============================================================ */
@@ -9,15 +9,15 @@
 'use strict';
 
   /* ---------- 路由 ---------- */
-  const ROUTES = ['multi', 'batch', 'params', 'policy', 'rules'];
+  const ROUTES = ['multi', 'batch', 'policy', 'rules'];
 
   function currentRoute() {
     const h = (location.hash || '').replace(/^#\/?/, '');
-    return ROUTES.indexOf(h) >= 0 ? h : 'multi';
+    return ROUTES.includes(h) ? h : 'multi';
   }
 
   function navigate(route) {
-    if (ROUTES.indexOf(route) < 0) route = 'multi';
+    if (!ROUTES.includes(route)) route = 'multi';
     if (currentRoute() === route) { renderRoute(); return; }
     location.hash = '#/' + route;
   }
@@ -98,11 +98,14 @@
       b.classList.toggle('active', b.dataset.incomeType === type));
     const showSalary = type === 'salary';
     const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
-    show('params-mode-banner', !showSalary);   // 劳务模式下参数页显示提示横幅
+    show('multi-params-card', showSalary);     // 工资参数卡内嵌于多月累计页
+    show('batch-global-fallback', showSalary); // 批量页全局兜底设置（整批城市/应发作基数）
     show('batch-info-labor', !showSalary);
     show('batch-info-salary', showSalary);
     show('multi-gap-row', !showSalary);   // 断月重置不适用于工资薪金
     show('multi-bonus-row', showSalary);  // 年终奖仅工资薪金适用
+    show('rules-labor', !showSalary);     // 计算规则页跟随所得类型切换
+    show('rules-salary', showSalary);
     PageMulti.updateMultiInputHints();
   }
 
@@ -140,14 +143,16 @@
     initDirection();
 
     PageMulti.buildMonthGrid();
+    PageRules.render();   // 计算规则页税率表（与 TaxEngine 共用数据）
 
     // 有外置政策数据时默认选第一个非自定义城市
     if (Object.keys(PolicyLib.CITY_POLICY_LIBRARY).length > 1 && salaryParams.cityId === 'custom') {
       salaryParams.cityId = Object.keys(PolicyLib.CITY_POLICY_LIBRARY).find(k => k !== 'custom') || 'custom';
     }
-    const _spCitySel = document.getElementById('sp-city');
-    if (_spCitySel) _spCitySel.innerHTML = PageParams.buildCityOptions(salaryParams.cityId);
+    const spCitySel = document.getElementById('sp-city');
+    if (spCitySel) spCitySel.innerHTML = PageParams.buildCityOptions(salaryParams.cityId);
     PageParams.onCityParamChange();
+    PageParams.initCard();
     setIncomeType('labor');
     PagePolicy.onPmCityChange();   // 政策库页初始化：城市下拉 + 编辑器 + 存储状态
 

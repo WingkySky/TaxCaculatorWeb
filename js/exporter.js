@@ -6,11 +6,8 @@
  * ============================================================ */
 (function () {
 'use strict';
-  const round2 = (...a) => TaxUtils.round2(...a);
-  const fundItem = (...a) => PolicyLib.fundItem(...a);
-  const resolvePolicyMemo = (...a) => PolicyLib.resolvePolicyMemo(...a);
-  const BRACKETS = TaxEngine.BRACKETS;
-  const MONTHLY_BRACKETS = TaxEngine.MONTHLY_BRACKETS;
+  const { round2, downloadFile } = TaxUtils;
+  const { resolvePolicyMemo } = PolicyLib;
 
 function ensureXLSX(cb) {
   if (typeof XLSX !== 'undefined') return cb();
@@ -21,8 +18,13 @@ function ensureXLSX(cb) {
   document.head.appendChild(s);
 }
 
-/** 政策库 → 扁平行（Excel 维护格式：每行一个 城市×年度×险种） */
+/** 工作簿 → 二进制 → 统一走 downloadFile：安全上下文弹「另存为」选位置，file:// 直接下载（与 CSV 行为一致） */
+function saveWorkbook(wb, filename) {
+  const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return downloadFile(data, filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
 
+/** 批量模板下载：按所得类型给出对应的 CSV 样例 */
 function downloadTemplate() {
   if (incomeType === 'salary') {
     const csv = '姓名,身份证号,月份,应发工资,城市,社保基数,公积金基数,公积金比例,专项附加扣除,年终奖\n张三,110101199001011234,2026-01,10000,广州,10000,10000,5,1000,\n张三,110101199001011234,2026-02,10000,广州,10000,10000,5,1000,36000\n李四,110101199202022345,2026-01,8000,深圳,8000,,12,,\n王五,110101199303033456,2026-01,9000,,,,,800,';
@@ -266,7 +268,7 @@ function exportMultiExcelFormula() {
   if (incomeType !== 'salary') return alert('公式明细导出目前支持「工资薪金」模式');
   const results = window._multiResults;
   if (!results || !results.length) return alert('请先计算');
-  ensureXLSX(() => {
+  return ensureXLSX(() => {
     const grid = buildSalaryFormulaGrid(results, {
       nameOf: () => '本人',
       chainKey: (r) => String(r.month || '').split('-')[0],
@@ -284,7 +286,7 @@ function exportMultiExcelFormula() {
     });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, gridToWorksheet(grid), '工资计算明细');
-    XLSX.writeFile(wb, '多月工资个税明细(公式版).xlsx');
+    return saveWorkbook(wb, '多月工资个税明细(公式版).xlsx');
   });
 }
 
@@ -293,7 +295,7 @@ function exportBatchExcelFormula() {
   if (incomeType !== 'salary') return alert('公式明细导出目前支持「工资薪金」模式');
   const results = window._batchResults;
   if (!results || !results.length) return alert('请先计算');
-  ensureXLSX(() => {
+  return ensureXLSX(() => {
     const grid = buildSalaryFormulaGrid(results, {
       idCard: results.some(r => r.idCard),
       phone: results.some(r => r.phone),
@@ -313,10 +315,10 @@ function exportBatchExcelFormula() {
     });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, gridToWorksheet(grid), '批量工资明细');
-    XLSX.writeFile(wb, '批量工资个税明细(公式版).xlsx');
+    return saveWorkbook(wb, '批量工资个税明细(公式版).xlsx');
   });
 }
 
 
-  window.Exporter = { buildSalaryFormulaGrid,colLetter,downloadTemplate,ensureXLSX,exportBatchExcelFormula,exportMultiExcelFormula,fxAnnualQuick,fxAnnualRate,fxBonusQuick,fxBonusRate,fxSiAmount,gridToWorksheet };
+  window.Exporter = { buildSalaryFormulaGrid,colLetter,downloadTemplate,ensureXLSX,exportBatchExcelFormula,exportMultiExcelFormula,fxAnnualQuick,fxAnnualRate,fxBonusQuick,fxBonusRate,fxSiAmount,gridToWorksheet,saveWorkbook };
 })();

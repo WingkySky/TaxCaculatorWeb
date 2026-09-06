@@ -5,27 +5,55 @@
  * ============================================================ */
 (function () {
 'use strict';
-  const renderSalaryItemsTable = (...a) => PageParams.renderSalaryItemsTable(...a);
-  const round2 = (...a) => TaxUtils.round2(...a);
-  const CITY_POLICY_LIBRARY = PolicyLib.CITY_POLICY_LIBRARY;
-  const clearPolicyLibraryStorage = (...a) => PolicyLib.clearPolicyLibraryStorage(...a);
-  const normalizePolicyLibrary = (...a) => PolicyLib.normalizePolicyLibrary(...a);
-  const _policyCache = PolicyLib._policyCache;
-  const onCityParamChange = (...a) => PageParams.onCityParamChange(...a);
-  const fundItem = (...a) => PolicyLib.fundItem(...a);
-  const rowsToLibrary = (...a) => PolicyLib.rowsToLibrary(...a);
-  const savePolicyLibrary = (...a) => PolicyLib.savePolicyLibrary(...a);
-  const libraryToRows = (...a) => PolicyLib.libraryToRows(...a);
-  const SI_ITEM_LABELS = PolicyLib.SI_ITEM_LABELS;
-  const FUND_RATES_STD = PolicyLib.FUND_RATES_STD;
-  const SI_ITEMS = PolicyLib.SI_ITEMS;
-  const ensureXLSX = (...a) => Exporter.ensureXLSX(...a);
-  const siItem = (...a) => PolicyLib.siItem(...a);
+  const { round2, downloadFile } = TaxUtils;
+  const { CITY_POLICY_LIBRARY, FUND_RATES_STD, SI_ITEMS, SI_ITEM_LABELS, _policyCache, clearPolicyLibraryStorage,
+    fundItem, libraryToRows, normalizePolicyLibrary, rowsToLibrary, savePolicyLibrary, siItem } = PolicyLib;
+  const { ensureXLSX, saveWorkbook } = Exporter;
+  const { buildCityOptions, onCityParamChange, renderSalaryItemsTable } = PageParams;
 
 // ==================== 政策数据管理弹层 ====================
 
+/** 城市集合变化后同步各处下拉：重建参数卡城市选项，再触发年度/公积金/批量兜底盒联动刷新 */
+function syncCitySelects() {
+  const spCitySel = document.getElementById('sp-city');
+  if (spCitySel) spCitySel.innerHTML = buildCityOptions(salaryParams.cityId);
+  onCityParamChange();
+}
+
 window._pmCity = 'custom';
 window._pmYear = '';
+
+/** 当前编辑中的（城市, 年度）记录；无有效记录返回 null */
+function pmCurrentYearRec() {
+  const city = CITY_POLICY_LIBRARY[window._pmCity];
+  return (city && city.years[window._pmYear]) || null;
+}
+
+/** 「自定义」兜底险种：默认比例、无上下限（新增城市 / 导入兜底共用） */
+function defaultCustomItems() {
+  return {
+    pension:      siItem(0.08, null, null, 0.16),
+    medical:      siItem(0.02, null, null, 0.08),
+    unemployment: siItem(0.005, null, null, 0.005),
+    injury:       siItem(0, null, null, 0.002),
+    fund:         fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
+  };
+}
+
+/** 兜底「自定义」城市（默认比例，无上下限） */
+function defaultCustomCity() {
+  return {
+    name: '自定义',
+    years: {
+      custom: {
+        label: '自定义政策',
+        effective: ['2000-01', '2999-12'],
+        pending: true,
+        items: defaultCustomItems()
+      }
+    }
+  };
+}
 
 function openPolicyModal() {
   // 政策库已从弹层升级为独立页面：保留「首次跟随工资参数城市」的语义，改为导航
@@ -87,8 +115,7 @@ function updatePmStorageStatus() {
 
 function renderPolicyEditor() {
   updatePmStorageStatus();
-  const lib = CITY_POLICY_LIBRARY[window._pmCity];
-  const rec = lib && lib.years[window._pmYear];
+  const rec = pmCurrentYearRec();
   const effStart = document.getElementById('pm-eff-start');
   const effEnd = document.getElementById('pm-eff-end');
   const label = document.getElementById('pm-label');
@@ -149,8 +176,7 @@ function onPmItemInput(cityKey, yk, itemKey, field, value) {
 }
 
 function onPmFundRatesInput(value) {
-  const lib = CITY_POLICY_LIBRARY[window._pmCity];
-  const rec = lib && lib.years[window._pmYear];
+  const rec = pmCurrentYearRec();
   const it = rec && rec.items.fund;
   if (!it) return;
   const rates = String(value).split(/[,，]/).map(s => parseFloat(s) / 100).filter(n => !isNaN(n) && n > 0);
@@ -161,8 +187,7 @@ function onPmFundRatesInput(value) {
 }
 
 function onPmEffectiveChange() {
-  const lib = CITY_POLICY_LIBRARY[window._pmCity];
-  const rec = lib && lib.years[window._pmYear];
+  const rec = pmCurrentYearRec();
   if (!rec) return;
   const s = document.getElementById('pm-eff-start').value.trim();
   const e = document.getElementById('pm-eff-end').value.trim();
@@ -174,8 +199,7 @@ function onPmEffectiveChange() {
 }
 
 function onPmLabelChange() {
-  const lib = CITY_POLICY_LIBRARY[window._pmCity];
-  const rec = lib && lib.years[window._pmYear];
+  const rec = pmCurrentYearRec();
   if (rec) rec.label = document.getElementById('pm-label').value.trim() || window._pmYear;
   _policyCache.clear();
   savePolicyLibrary();
@@ -195,13 +219,7 @@ function pmAddCity() {
         label: clean + '政策',
         effective: ['2000-01', '2999-12'],
         pending: true,
-        items: {
-          pension:      siItem(0.08, null, null, 0.16),
-          medical:      siItem(0.02, null, null, 0.08),
-          unemployment: siItem(0.005, null, null, 0.005),
-          injury:       siItem(0, null, null, 0.002),
-          fund:         fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
-        }
+        items: defaultCustomItems()
       }
     }
   };
@@ -209,6 +227,7 @@ function pmAddCity() {
   savePolicyLibrary();
   window._pmCity = key;
   onPmCityChange();
+  syncCitySelects();
 }
 
 function pmAddYear() {
@@ -253,14 +272,7 @@ function pmResetToSeed() {
     Object.assign(CITY_POLICY_LIBRARY, seed);
     normalizePolicyLibrary(CITY_POLICY_LIBRARY);
   } else if (!CITY_POLICY_LIBRARY.custom) {
-    CITY_POLICY_LIBRARY.custom = {
-      name: '自定义',
-      years: { custom: { label: '自定义政策', effective: ['2000-01', '2999-12'], pending: true, items: {
-        pension: siItem(0.08, null, null, 0.16), medical: siItem(0.02, null, null, 0.08),
-        unemployment: siItem(0.005, null, null, 0.005), injury: siItem(0, null, null, 0.002),
-        fund: fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
-      } } }
-    };
+    CITY_POLICY_LIBRARY.custom = defaultCustomCity();
   }
   if (!CITY_POLICY_LIBRARY[salaryParams.cityId]) salaryParams.cityId = 'custom';
   window._pmCity = CITY_POLICY_LIBRARY[salaryParams.cityId] ? salaryParams.cityId : Object.keys(CITY_POLICY_LIBRARY)[0];
@@ -268,7 +280,7 @@ function pmResetToSeed() {
   window._policySavedAt = '';
   _policyCache.clear();
   onPmCityChange();
-  onCityParamChange();
+  syncCitySelects();
 }
 
 function pmExportJSON() {
@@ -280,14 +292,7 @@ function applyImportedLibrary(lib, errors) {
   Object.keys(CITY_POLICY_LIBRARY).forEach(k => delete CITY_POLICY_LIBRARY[k]);
   Object.assign(CITY_POLICY_LIBRARY, lib);
   if (!CITY_POLICY_LIBRARY.custom) {
-    CITY_POLICY_LIBRARY.custom = {
-      name: '自定义',
-      years: { custom: { label: '自定义政策', effective: ['2000-01', '2999-12'], pending: true, items: {
-        pension: siItem(0.08, null, null, 0.16), medical: siItem(0.02, null, null, 0.08),
-        unemployment: siItem(0.005, null, null, 0.005), injury: siItem(0, null, null, 0.002),
-        fund: fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
-      } } }
-    };
+    CITY_POLICY_LIBRARY.custom = defaultCustomCity();
   }
   normalizePolicyLibrary(CITY_POLICY_LIBRARY);
   if (!CITY_POLICY_LIBRARY[salaryParams.cityId]) salaryParams.cityId = 'custom';
@@ -295,19 +300,19 @@ function applyImportedLibrary(lib, errors) {
   _policyCache.clear();
   savePolicyLibrary();
   onPmCityChange();
-  onCityParamChange();
+  syncCitySelects();
   alert(`导入成功：${Object.keys(CITY_POLICY_LIBRARY).length} 个城市${errors && errors.length ? `（${errors.length} 条问题行已跳过，详见控制台）` : ''}`);
   if (errors && errors.length) console.warn('政策库导入问题行：', errors);
 }
 
 function pmExportExcel() {
-  ensureXLSX(() => {
+  return ensureXLSX(() => {
     const rows = libraryToRows(CITY_POLICY_LIBRARY);
     const ws = XLSX.utils.aoa_to_sheet(rows);
     ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 11 }, { wch: 11 }, { wch: 30 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 10 }, { wch: 10 }, { wch: 22 }, { wch: 8 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '政策库');
-    XLSX.writeFile(wb, '城市社保公积金政策库.xlsx');
+    return saveWorkbook(wb, '城市社保公积金政策库.xlsx');
   });
 }
 

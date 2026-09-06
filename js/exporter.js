@@ -9,13 +9,19 @@
   const { round2, downloadFile } = TaxUtils;
   const { resolvePolicyMemo } = PolicyLib;
 
+/** SheetJS 加载链：内存已有 → 本地同目录 xlsx.full.min.js（file:// 离线可用）→ CDN 回退 → 提示失败。
+ *  本地与 CDN 钉死同一版本（0.20.1），避免两源行为差异。 */
 function ensureXLSX(cb) {
   if (typeof XLSX !== 'undefined') return cb();
-  const s = document.createElement('script');
-  s.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
-  s.onload = () => cb();
-  s.onerror = () => alert('SheetJS 库加载失败，请检查网络后重试');
-  document.head.appendChild(s);
+  const load = (src, onfail) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => cb();
+    s.onerror = () => onfail();
+    document.head.appendChild(s);
+  };
+  load('xlsx.full.min.js', () => load('https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js',
+    () => alert('SheetJS 库加载失败：未找到本地 xlsx.full.min.js 且网络不可达。请将该文件与页面放在同一目录，或联网后重试')));
 }
 
 /** 工作簿 → 二进制 → 统一走 downloadFile：安全上下文弹「另存为」选位置，file:// 直接下载（与 CSV 行为一致） */

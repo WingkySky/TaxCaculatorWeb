@@ -134,14 +134,14 @@
 ## 使用技术
 
 - 纯前端实现，无需后端服务、无构建步骤、无 npm 依赖
-- 支持 SheetJS (xlsx) 库处理 Excel 文件（CDN 按需加载）
+- 支持 SheetJS (xlsx) 库处理 Excel 文件：**本地优先**——优先加载与页面同目录的 `xlsx.full.min.js`（file:// 双击离线可用），缺失时回退 CDN（同一版本 0.20.1），两者都不可达时提示
 - 响应式设计：桌面侧边栏可折叠，≤768px 自动转抽屉菜单，适配桌面和移动端
 
 ## 本地使用
 
 直接在浏览器中打开 `index.html` 文件即可使用，无需安装任何依赖。
 
-> 跨机拷贝或分发时，请将 `index.html` 与 `css/`、`js/` 目录和 `tax-policy-data.js`（城市政策初始化数据）放在同一目录整体拷贝；缺少 `tax-policy-data.js` 时工具仍可用（仅"自定义"城市），并会提示导入 Excel/JSON 政策数据。
+> 跨机拷贝或分发时，请将 `index.html` 与 `css/`、`js/` 目录和 `tax-policy-data.js`（城市政策初始化数据）、`xlsx.full.min.js`（Excel 功能本地库，缺失时回退 CDN）放在同一目录整体拷贝；缺少 `tax-policy-data.js` 时工具仍可用（仅"自定义"城市），并会提示导入 Excel/JSON 政策数据。
 >
 > 挂网部署：将整个目录上传到任意静态服务器即可，无需任何构建。
 

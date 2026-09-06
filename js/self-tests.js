@@ -17,6 +17,7 @@
   const { detectColumnMapping, groupPersons, makeBatchBonusSeparateRow, processWithMapping,
     runBatchLaborPass, runBatchSalaryPass, runBatchSalaryPerson } = PageBatch;
   const { buildBatchReportData, buildMultiReportData, maskBankCard, maskIdCard, maskPhone } = PageReport;
+  const { estimateLaborWithholding, estimateSalaryWithholding, incomeOf, settle, EXTRA_ANNUAL_DEFAULTS } = TaxAnnual;
 
 // ==================== Self tests ====================
 // 控制台自检：城市政策库、逐险种 clamp、年度匹配、工资累计预扣、反算、劳务回归。
@@ -588,6 +589,87 @@ function runExporterTests() {
   return { passed: t.length - failed.length, total: t.length, failed };
 }
 
+// ==================== 年度汇算自检 ====================
+// 收入额折算三类口径、劳务/工资预扣估算与累计预扣引擎一致、
+// settle 标准算例（应退 780 验收锚点）、手填覆盖、免汇算边界、空输入防呆。
+
+function runAnnualTests() {
+  const t = [];
+  const eq = (name, actual, expected, eps = 0.0001) => {
+    const ok = Math.abs(actual - expected) <= eps;
+    t.push({ name, ok, actual, expected });
+    return ok;
+  };
+  const isTrue = (name, cond) => eq(name, cond ? 1 : 0, 1);
+
+  // —— 收入额折算（汇算口径）——
+  eq('汇算·工资收入额=全额', incomeOf('salary', 10000), 10000);
+  eq('汇算·劳务收入额×80%', incomeOf('labor', 30000), 24000);
+  eq('汇算·稿酬收入额×80%×70%', incomeOf('author', 10000), 5600);
+  eq('汇算·特许权收入额×80%', incomeOf('royalty', 10000), 8000);
+  eq('汇算·收入额负数防呆', incomeOf('labor', -5), 0);
+
+  // —— 预扣估算：工资/劳务与累计预扣引擎一致 ——
+  eq('汇算·工资预扣估算（1月1万，三险一金2250+附加1000）= 52.50',
+    estimateSalaryWithholding([{ month: '2026-01', amount: 10000 }], 2250, 1000), 52.5);
+  eq('汇算·劳务预扣估算（6月单笔3万）= 570',
+    estimateLaborWithholding([{ month: '2026-06', amount: 30000 }]), 570);
+  isTrue('汇算·劳务旧政策月（2025-09）不扣税',
+    estimateLaborWithholding([{ month: '2025-09', amount: 30000 }]) === 0);
+
+  // —— settle 标准算例（验收锚点）：工资12万+劳务6月一笔3万 → 应退 780 ——
+  const r = settle({
+    salaryIncome: 120000, salaryDeductionsAnnual: 27000,
+    laborIncome: 30000, authorIncome: 0, royaltyIncome: 0,
+    extraAnnual: EXTRA_ANNUAL_DEFAULTS.houseLoan,
+    withheld: { salary: 630, labor: 570, author: 0, royalty: 0 }
+  });
+  eq('汇算·收入额合计 144,000', r.totalIncomeAmount, 144000);
+  eq('汇算·应纳税所得额 45,000', r.taxable, 45000);
+  eq('汇算·应纳税额 1,980', r.annualTax, 1980);
+  isTrue('汇算·适用税率 10%（速算 2,520）', r.rate === 0.1 && r.quick === 2520);
+  eq('汇算·应补税 780（验收锚点：劳务并入跳档，预扣不足）', r.payable, 780);
+  isTrue('汇算·应补 780 时无免汇算标志（>400 且收入>12万）', r.exempt === false && r.refund === 0);
+
+  // —— 手填覆盖与免汇算边界 ——
+  const r2 = settle({
+    salaryIncome: 130000, salaryDeductionsAnnual: 27000,
+    laborIncome: 0, authorIncome: 0, royaltyIncome: 0,
+    extraAnnual: 12000,
+    withheld: { salary: 400, labor: 0, author: 0, royalty: 0 }
+  });
+  isTrue('汇算·手填预扣生效（应补 530）', r2.withheldTotal === 400 && r2.payable === 530 && r2.exempt === false);
+  const r3 = settle({
+    salaryIncome: 130000, salaryDeductionsAnnual: 27000,
+    laborIncome: 0, authorIncome: 0, royaltyIncome: 0,
+    extraAnnual: 12000,
+    withheld: { salary: 560, labor: 0, author: 0, royalty: 0 }
+  });
+  isTrue('汇算·补税≤400 免汇算标志', r3.payable === 370 && r3.exempt === true);
+  const r4 = settle({
+    salaryIncome: 110000, salaryDeductionsAnnual: 20000,
+    laborIncome: 0, authorIncome: 0, royaltyIncome: 0,
+    extraAnnual: 12000,
+    withheld: { salary: 0, labor: 0, author: 0, royalty: 0 }
+  });
+  isTrue('汇算·年收入≤12万且需补税 → 免汇算', r4.totalIncome <= 120000 && r4.payable > 0 && r4.exempt === true);
+
+  // —— 空输入防呆 ——
+  const r5 = settle({ withheld: {} });
+  isTrue('汇算·空输入归零不抛错', r5.annualTax === 0 && r5.refund === 0 && r5.payable === 0);
+
+  const failed = t.filter(x => !x.ok);
+  const summary = `${t.length - failed.length}/${t.length} 通过`;
+  if (failed.length) {
+    console.group('🧪 年度汇算自检：' + summary);
+    failed.forEach(f => console.error(`✗ ${f.name}：期望 ${f.expected}，实际 ${f.actual}`));
+    console.groupEnd();
+  } else {
+    console.log('🧪 年度汇算自检： ' + summary);
+  }
+  return { passed: t.length - failed.length, total: t.length, failed };
+}
+
 // ==================== 聚合入口 ====================
 
 /** 三套件聚合：浏览器自动执行与 node tests/run.js 共用同一入口 */
@@ -595,7 +677,8 @@ function runAll() {
   const suites = [
     { name: '计税与政策库', result: runSelfTests() },
     { name: '批量计税流水线', result: runBatchPipelineTests() },
-    { name: '导出器组装', result: runExporterTests() }
+    { name: '导出器组装', result: runExporterTests() },
+    { name: '年度汇算', result: runAnnualTests() }
   ];
   const failed = [];
   suites.forEach(s => s.result.failed.forEach(f => failed.push(Object.assign({ suite: s.name }, f))));

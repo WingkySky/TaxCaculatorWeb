@@ -9,7 +9,7 @@
 'use strict';
 
   /* ---------- 路由 ---------- */
-  const ROUTES = ['multi', 'batch', 'policy', 'rules'];
+  const ROUTES = ['multi', 'batch', 'annual', 'policy', 'rules'];
 
   function currentRoute() {
     const h = (location.hash || '').replace(/^#\/?/, '');
@@ -144,6 +144,7 @@
 
     PageMulti.buildMonthGrid();
     PageRules.render();   // 计算规则页税率表（与 TaxEngine 共用数据）
+    PageAnnual.render();  // 年度汇算页表单（年度切换只影响计算，不需重建）
 
     // 有外置政策数据时默认选第一个非自定义城市
     if (Object.keys(PolicyLib.CITY_POLICY_LIBRARY).length > 1 && salaryParams.cityId === 'custom') {

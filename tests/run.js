@@ -37,7 +37,9 @@ globalThis.location = { hash: '', href: '' };
   'tax-policy-data.js',
   'js/state.js', 'js/utils.js', 'js/tax-engine.js', 'js/policy-library.js',
   'js/social-insurance.js', 'js/exporter.js', 'js/ui.js', 'js/page-shared.js',
-  'js/page-multi.js', 'js/page-batch.js', 'js/page-params.js', 'js/self-tests.js'
+  'js/page-multi.js',
+  'js/batch-parse.js', 'js/batch-calc.js', 'js/batch-source.js', 'js/batch-view.js', 'js/batch-export.js',
+  'js/page-batch.js', 'js/page-params.js', 'js/self-tests.js'
 ].forEach(f => require(path.join(ROOT, f)));
 
 const r = window.TaxTest.runAll();

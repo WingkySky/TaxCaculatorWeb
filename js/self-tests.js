@@ -15,7 +15,7 @@
   const { buildSalaryFormulaGrid, colLetter } = Exporter;
   const { buildBonusSeparateRow } = PageMulti;
   const { detectColumnMapping, groupPersons, makeBatchBonusSeparateRow, processWithMapping,
-    runBatchSalaryPass, runBatchSalaryPerson } = PageBatch;
+    runBatchLaborPass, runBatchSalaryPass, runBatchSalaryPerson } = PageBatch;
 
 // ==================== Self tests ====================
 // 控制台自检：城市政策库、逐险种 clamp、年度匹配、工资累计预扣、反算、劳务回归。
@@ -447,6 +447,21 @@ function runBatchPipelineTests() {
   // —— 劳务批量引擎级判定（逐行接线属 DOM 流程，见浏览器冒烟）——
   isTrue('劳务断月重置·间隔超 1 个月判定', isGapMonth('2025-10', '2026-01') === true && isGapMonth('2026-01', '2026-02') === false);
   isTrue('劳务新旧政策·2025-10 切换点', isNewPolicy('2025-09') === false && isNewPolicy('2025-10') === true);
+
+  // —— 劳务批量管线（runBatchLaborPass，自 runBatchCalc 函数化；cumIncome 为 ×80% 收入额口径）——
+  let lRows = runBatchLaborPass(group, [rec('2025-09', 10000), rec('2025-10', 10000), rec('2025-11', 10000)]);
+  isTrue('劳务批量·旧政策行标注且不扣税', lRows[0]._isOldPolicy === true && lRows[0].currentTax === 0);
+  isTrue('劳务批量·2025-10 起新政策累计', lRows[1]._isOldPolicy === false && lRows[1].cumIncome === 8000 && lRows[2].cumIncome === 16000);
+  batchGapReset = true;
+  lRows = runBatchLaborPass(group, [rec('2025-10', 10000), rec('2025-12', 10000)]);
+  isTrue('劳务批量·断月重置开关生效（_isGap 且累计归零）', lRows[1]._isGap === true && lRows[1].cumIncome === 8000);
+  batchGapReset = false;
+  lRows = runBatchLaborPass(group, [rec('2025-10', 10000), rec('2025-12', 10000)]);
+  isTrue('劳务批量·断月关闭时累计延续', lRows[1]._isGap === false && lRows[1].cumIncome === 16000);
+  batchDirection = 'reverse';
+  lRows = runBatchLaborPass(group, [rec('2026-01', 9910)]);
+  isTrue('劳务批量·反算税前 10000 且税后回代', Math.abs(lRows[0].preTax - 10000) <= 0.01 && Math.abs(lRows[0].postTax - 9910) <= 0.01);
+  batchDirection = 'forward';
 
   Object.assign(salaryParams, saved);
   batchDirection = savedBatch.dir;

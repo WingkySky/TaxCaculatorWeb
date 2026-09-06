@@ -87,3 +87,14 @@ index.html 在 `page-batch.js` 前插入五个 script，顺序即依赖序：
 | `tests/run.js` | 加载清单追加 5 文件 |
 | `js/self-tests.js` | 批量套件补劳务断言（+6） |
 | `README.md` | 架构描述同步 |
+
+## 实施记录（2026-09-06）
+
+已实施并验收通过：
+
+- 拆分结果：`batch-parse.js` 852 行（纯逻辑）/ `batch-calc.js` 367 行（含 `runBatchLaborPass` 函数化）/ `batch-source.js` 181 行 / `batch-view.js` 640 行 / `batch-export.js` 62 行 / `page-batch.js` 门面约 210 行（原 2,216 行）。
+- 回归门 131/131（新增劳务管线断言后 126→131），Git Bash 与 PowerShell 双 shell 全绿；file://（Edge 无头）三套件全绿、零 JS 错误。
+- `PageBatch` 导出面比对：HEAD 70 个 key **零丢失**，新增 11 个（BatchSource 状态访问器 ×7、`buildPersonKey/groupPersons/toggleRows` 纳入导出、新函数 `runBatchLaborPass`）。
+- 浏览器冒烟：`processWithMapping → runBatchCalc → renderBatchResults` 函数直调链路走通（3 行数据全链正确）、列映射 UI 直调渲染正常、批量兜底盒上传前可见、侧栏配置组只剩政策库、`#/params` 回落多月页、参数卡工资模式可见。
+- 实施中发现并修复一处存量 bug：`renderSourceSelectionHTML` 中数据表勾选/「预览此表」/「仅用此表」的内联事件为裸调用（`toggleBatchSource(...)` 等，函数在 IIFE 内不在 window 上），多数据表场景点击即抛 ReferenceError——已补 `PageBatch.` 前缀并在冒烟中验证。
+- 实施偏差：`runBatchLaborPass` 断言初版对劳务 `cumIncome` 口径假设错误（实为 ×80% 收入额累加），按引擎实现修正期望值，属测试修正非行为变化。

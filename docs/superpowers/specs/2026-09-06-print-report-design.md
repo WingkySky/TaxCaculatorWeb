@@ -84,3 +84,12 @@
 - 回归门 136/136（导出器组装套件 10→15：脱敏三例、批量组装分组/小计/总计/月份范围、空结果防呆），Git Bash 与 PowerShell 双 shell 全绿；file://（Edge 无头）三套件全绿、零 JS 错误。
 - 浏览器冒烟三场景全过：多月·工资（按钮出现、`window.print` 触发、抬头 prompt 记忆、参数分节/合计/政策口径/页脚齐全）、批量·工资（2 人块、总计、整批城市参数、脱敏后身份证原文不出现于报告 DOM）、多月·劳务（断月重置参数、新旧政策口径句、空抬头不出现 undefined）。
 - 实施说明：报告数据组装函数接收 `(rows, env)` 两参以保持纯函数可测性（env 由 DOM 层 `collectMultiEnv/collectBatchEnv` 收集）；冒烟中 `window.print/prompt` 以桩替换，真实打印效果待用户 Ctrl+P 人工过目。
+
+## 修复记录（2026-09-07，用户实测反馈）
+
+用户双击打开（file://）点「打印报告」出现**打印预览全空白**，另反馈批量页打印按钮颜色与相邻按钮不统一。两处修复：
+
+1. **根因**：`#print-report` 容器原本插在 `.main-area` 内部，而打印 CSS 以 `body > *:not(#print-report)` 隐藏界面——容器的祖先 `.app-shell` 被隐藏后报告随之消失，打印预览必然全空。修复：容器移至 `<body>` 直接子级；并加双保险 `html, body { height: auto !important; overflow: visible !important; }` 解除视口布局约束，`window.print()` 延迟 60ms 等待布局完成。
+2. **按钮风格**：批量页打印按钮 `btn-secondary` → `btn-green`，与相邻导出按钮统一（输出类动作为绿色）。
+
+**验收教训**：此前冒烟只断言了报告 DOM 填充，未覆盖真实打印通道（打印媒体下的呈现），导致结构 bug 漏网；本轮补充断言 `print-report.parentElement === document.body` 与延迟打印时序，最终打印效果仍需用户 Ctrl+P 复验。

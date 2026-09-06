@@ -626,7 +626,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
       <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" onclick="PageBatch.resetBatch()"> 重置数据</button>
       ${isSalary ? `<button class="btn btn-green" style="padding:6px 14px;font-size:12px;" onclick="PageBatch.exportBatchExcelFormula()"> 导出 Excel（公式明细）</button>` : ''}
       <button class="btn btn-green" style="padding:6px 14px;font-size:12px;" onclick="PageBatch.exportBatchCSV()"> 导出结果 CSV</button>
-      <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" onclick="PageReport.printReport('batch')"> 打印报告</button>
+      <button class="btn btn-green" style="padding:6px 14px;font-size:12px;" onclick="PageReport.printReport('batch')"> 打印报告</button>
     </div>
     ${personBlocks}
   `;

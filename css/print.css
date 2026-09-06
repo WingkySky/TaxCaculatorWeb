@@ -10,6 +10,9 @@
 @media print {
   @page { size: A4 portrait; margin: 14mm 12mm; }
 
+  /* 解除应用布局的视口高度/溢出约束，避免报告被裁剪 */
+  html, body { height: auto !important; overflow: visible !important; }
+
   body > *:not(#print-report) { display: none !important; }
   #print-report {
     display: block !important;

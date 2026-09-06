@@ -244,7 +244,8 @@ function printReport(source) {
     : buildMultiReportData(rows, collectMultiEnv());
   if (!data) return alert('请先完成计算');
   renderReport(data);
-  window.print();
+  // 等浏览器完成布局再唤起打印，避免打印预览捕获未重排的文档
+  setTimeout(() => window.print(), 60);
 }
 
   window.PageReport = { buildBatchReportData, buildMultiReportData, maskBankCard, maskIdCard, maskPhone, printReport };

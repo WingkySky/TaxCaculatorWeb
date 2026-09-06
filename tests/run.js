@@ -1,0 +1,48 @@
+/* ============================================================
+ * tests/run.js — 零依赖 Node 回归门
+ * 职责：无浏览器环境按 index.html 顺序加载源文件（子集，不含
+ *       page-policy/page-rules/app），执行 TaxTest.runAll() 全部自检
+ *       （计税与政策库 + 批量计税流水线 + 导出器组装），任一失败退出码 1。
+ * 运行：node tests/run.js（Git Bash / PowerShell 通用）。
+ * 维护约定：js/ 源码加载期用到新 DOM API 时在此补桩吸收，不改源码。
+ * ============================================================ */
+'use strict';
+const path = require('path');
+const ROOT = path.join(__dirname, '..');
+
+globalThis.window = globalThis;
+
+/** 宽松 element 桩：吸收 page-batch 等模块顶层的事件绑定与 DOM 属性写入 */
+function stubEl() {
+  return {
+    addEventListener() {}, removeEventListener() {},
+    classList: { add() {}, remove() {}, toggle() {} },
+    style: {}, value: '', checked: false, files: [],
+    innerHTML: '', textContent: '', appendChild() {},
+    querySelector: () => null, querySelectorAll: () => [],
+    add() {}, remove() {}, click() {}
+  };
+}
+globalThis.document = {
+  getElementById: () => stubEl(),
+  querySelector: () => null,
+  querySelectorAll: () => [],
+  createElement: () => stubEl(),
+  addEventListener() {},
+  body: stubEl()
+};
+globalThis.location = { hash: '', href: '' };
+
+[
+  'tax-policy-data.js',
+  'js/state.js', 'js/utils.js', 'js/tax-engine.js', 'js/policy-library.js',
+  'js/social-insurance.js', 'js/exporter.js', 'js/ui.js', 'js/page-shared.js',
+  'js/page-multi.js', 'js/page-batch.js', 'js/page-params.js', 'js/self-tests.js'
+].forEach(f => require(path.join(ROOT, f)));
+
+const r = window.TaxTest.runAll();
+if (r.failed.length) {
+  console.error(`🧪 回归门失败：${r.passed}/${r.total}（明细见上方各套件输出）`);
+  process.exit(1);
+}
+console.log(`🧪 回归门全绿：${r.passed}/${r.total}`);

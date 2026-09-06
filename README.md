@@ -123,7 +123,7 @@
 - **侧边栏控制台布局**（Ant Design 企业蓝设计语言，手写 CSS 实现，零依赖）：计算（多月累计 / 批量计算）、配置（政策库）、帮助（计算规则）四个独立页面，hash 路由可直达（如 `index.html#/batch`）；「工资参数」以内嵌卡形式置于多月累计页顶部（仅工资薪金模式显示，可折叠并记忆状态），旧链接 `#/params` 自动落回多月页
 - **亮暗双主题**：默认跟随系统 `prefers-color-scheme`，顶栏一键切换并记忆；全部颜色收敛为 CSS 变量（`css/tokens.css` 两套 token）
 - **纯静态多文件架构**：样式（`css/`）与逻辑（`js/`）按模块拆分，各模块以 IIFE 命名空间暴露接口（`TaxEngine` / `PolicyLib` / `SocialIns` / `Exporter` / `PageShared` / `PageMulti` / `PageBatch` / `PageParams` / `PagePolicy` / `PageRules` / `App` 等），引入顺序即依赖顺序；计算逻辑与 UI 彻底分离
-- 内置控制台自检（`TaxTest.runSelfTests()`），页面加载时自动运行
+- 内置三套件控制台自检（**计税与政策库 94 项 + 批量计税流水线 22 项 + 导出器组装 10 项**，`TaxTest.runAll()` 页面加载时自动运行，console 查看）；命令行 `node tests/run.js` 可秒级回归同一份断言（零依赖，无需浏览器，任一失败退出码 1）
 
 ## 使用技术
 

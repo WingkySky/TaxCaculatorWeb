@@ -1,18 +1,21 @@
 /* ============================================================
  * self-tests.js — TaxTest 页面自检
- * 职责：94 项计税/政策库/公式导出自检，页面加载后自动运行并输出 console。
- * 对外接口：window.TaxTest。依赖：TaxEngine/PolicyLib/SocialIns/Exporter/PageMulti/PageBatch/TaxState/TaxUtils。
+ * 职责：三套件自检——计税与政策库（94 项）+ 批量计税流水线 + 导出器组装，
+ *       页面加载后自动运行并输出 console；node tests/run.js 跑同一份断言。
+ * 对外接口：window.TaxTest.{runSelfTests, runBatchPipelineTests, runExporterTests, runAll}。
+ * 依赖：TaxEngine/PolicyLib/SocialIns/Exporter/PageShared/PageMulti/PageBatch/TaxState/TaxUtils。
  * ============================================================ */
 (function () {
 'use strict';
   const { round2, parseFundRate } = TaxUtils;
   const { calcBonusTaxSeparate, calcTaxForward, calcTaxReverse, calcSalaryCumulativeTax, compareBonusStrategies,
-    findBonusTrapZone, mergeBonusIntoEntries, TAX_STRATEGIES } = TaxEngine;
+    findBonusTrapZone, getMonthlyBracket, isGapMonth, isNewPolicy, mergeBonusIntoEntries, TAX_STRATEGIES } = TaxEngine;
   const { CITY_POLICY_LIBRARY, findCityKey, resolvePolicy, rowsToLibrary, libraryToRows } = PolicyLib;
   const { computeSocialInsurance, computeSocialInsuranceDetail, computeExtraDetailFor, getExtraDeductionFor } = SocialIns;
-  const { buildSalaryFormulaGrid } = Exporter;
+  const { buildSalaryFormulaGrid, colLetter } = Exporter;
   const { buildBonusSeparateRow } = PageMulti;
-  const { detectColumnMapping } = PageBatch;
+  const { detectColumnMapping, groupPersons, makeBatchBonusSeparateRow, processWithMapping,
+    runBatchSalaryPass, runBatchSalaryPerson } = PageBatch;
 
 // ==================== Self tests ====================
 // 控制台自检：城市政策库、逐险种 clamp、年度匹配、工资累计预扣、反算、劳务回归。
@@ -321,5 +324,252 @@ function runSelfTests() {
   return { passed: t.length - failed.length, total: t.length, failed };
 }
 
-  window.TaxTest = { runSelfTests };
+// ==================== 批量计税流水线自检 ====================
+// 覆盖：processWithMapping 解析/映射/分组 → runBatchSalaryPass（三险一金兜底链、
+// 城市链、累计链、反算）→ runBatchSalaryPerson（年终奖双方案择优）→
+// makeBatchBonusSeparateRow；劳务侧为引擎级 isGapMonth / isNewPolicy 判定
+// （逐行计算与渲染接线属 DOM 流程，留在浏览器冒烟覆盖）。
+
+function runBatchPipelineTests() {
+  const t = [];
+  const eq = (name, actual, expected, eps = 0.0001) => {
+    const ok = Math.abs(actual - expected) <= eps;
+    t.push({ name, ok, actual, expected });
+    return ok;
+  };
+  const isTrue = (name, cond) => eq(name, cond ? 1 : 0, 1);
+
+  const saved = JSON.parse(JSON.stringify(salaryParams));
+  const savedBatch = { dir: batchDirection, city: batchCityId, grossAsBase: batchGrossAsBase, gap: batchGapReset };
+  salaryParams.policyYear = 'auto';
+  salaryParams.cityId = 'custom';
+  salaryParams.socialBase = 0;
+  salaryParams.fundBase = '';
+  salaryParams.fundRate = 0.12;
+  salaryParams.extraDeduction = 1000;
+  batchDirection = 'forward';
+  batchCityId = '';
+  batchGrossAsBase = false;
+
+  const group = { name: '张三', idCard: '', phone: '', bankCard: '' };
+  const rec = (month, amount, extra) => Object.assign(
+    { month, amount, socialBase: '', fundBase: '', fundRate: '', extraDeduction: '', bonus: '', city: '' },
+    extra || {});
+
+  // —— 三险一金兜底链：行内基数 > 全局基数 > 按应发工资作基数（勾选）> 记 0 标注 ——
+  let rows = runBatchSalaryPass(group, [rec('2026-01', 10000, { socialBase: 10000 })], []);
+  eq('批量兜底链·行内基数 10000×22.5%', rows[0]._siDetail.total, 2250);
+  salaryParams.socialBase = 8000;
+  rows = runBatchSalaryPass(group, [rec('2026-01', 10000)], []);
+  eq('批量兜底链·全局基数 8000×22.5%', rows[0]._siDetail.total, 1800);
+  salaryParams.socialBase = 0;
+  batchGrossAsBase = true;
+  rows = runBatchSalaryPass(group, [rec('2026-01', 10000)], []);
+  eq('批量兜底链·按应发工资作基数 10000×22.5%', rows[0]._siDetail.total, 2250);
+  batchGrossAsBase = false;
+  rows = runBatchSalaryPass(group, [rec('2026-01', 10000)], []);
+  isTrue('批量兜底链·全缺记 0 并标注', rows[0]._siMissing === true && rows[0]._siDetail === null);
+
+  // —— 城市链：行内城市 > 整批城市 > 工资参数；未知回退并标注 ——
+  rows = runBatchSalaryPass(group, [rec('2026-01', 10000, { socialBase: 10000, city: '深圳' })], []);
+  isTrue('批量城市链·行内城市优先（深圳）', rows[0]._cityKey === 'shenzhen' && rows[0].cityName.indexOf('深圳') >= 0);
+  rows = runBatchSalaryPass(group, [rec('2026-01', 10000, { socialBase: 10000, city: '火星' })], []);
+  isTrue('批量城市链·未知城市回退工资参数并标注', rows[0]._cityUnknown === true && rows[0]._cityKey === 'custom' && rows[0].cityName.indexOf('未识别') >= 0);
+
+  // —— 累计链：同月多笔只计一次、跨年重新起算 ——
+  rows = runBatchSalaryPass(group, [
+    rec('2026-02', 10000, { socialBase: 10000 }),
+    rec('2026-02', 5000, { socialBase: 10000 })
+  ], []);
+  isTrue('批量累计链·同月多笔减除与三险一金只计一次',
+    rows[1].cumDeduction === rows[0].cumDeduction && rows[1]._cumSI === rows[0]._cumSI);
+  rows = runBatchSalaryPass(group, [rec('2026-12', 10000, { socialBase: 10000 }), rec('2027-01', 8000, { socialBase: 8000 })], []);
+  eq('批量累计链·跨年重新起算', rows[1].cumIncome, 8000);
+
+  // —— 反算方向端到端（期望实发 10000 → 应发 > 10000 且税后回代）——
+  batchDirection = 'reverse';
+  rows = runBatchSalaryPass(group, [rec('2026-01', 10000, { socialBase: 10000 })], []);
+  isTrue('批量反算·应发>实发目标且税后≈10000', rows[0].preTax > 10000 && Math.abs(rows[0].postTax - 10000) <= 0.02);
+  batchDirection = 'forward';
+
+  // —— 年终奖：单独行计税与不进累计链 ——
+  const passRows = runBatchSalaryPass(group, [
+    rec('2026-01', 10000, { socialBase: 10000 }),
+    rec('2026-02', 10000, { socialBase: 10000 })
+  ], []);
+  const sepRow = makeBatchBonusSeparateRow(group, { month: '2026-02', bonus: 36000 }, passRows);
+  isTrue('批量年终奖·单独行 36000→3% 档 1080', sepRow._bonusSeparate === true && sepRow.currentTax === 1080 && sepRow.rate === 0.03);
+  eq('批量年终奖·单独行不进累计链', sepRow.cumIncome, passRows[1].cumIncome);
+
+  // —— 年终奖择优：人 × 年对比 ——
+  const hiRecs = [];
+  for (let m = 1; m <= 12; m++) hiRecs.push(rec('2026-' + String(m).padStart(2, '0'), 30000, { socialBase: 30000 }));
+  hiRecs[5].bonus = 36000;
+  let pRows = runBatchSalaryPerson(group, hiRecs);
+  const hiSep = pRows.find(r => r._bonusSeparate);
+  isTrue('批量择优·高薪时年终奖单独计税（1080）', !!hiSep && hiSep.currentTax === 1080);
+
+  pRows = runBatchSalaryPerson(group, [rec('2026-01', 30000, { bonus: 38000 })]);
+  const combRow = pRows.find(r => r._isBonus && r._bonusStrategy === 'combined');
+  isTrue('批量择优·低薪时年终奖并入综合所得', !!combRow && pRows[pRows.length - 1].cumIncome === 68000);
+
+  batchDirection = 'reverse';
+  pRows = runBatchSalaryPerson(group, [rec('2026-01', 14000, { socialBase: 10000, bonus: 36000 })]);
+  isTrue('批量年终奖·反算方向一律单独计税', pRows.some(r => r._bonusSeparate === true) && pRows.every(r => r._bonusStrategy !== 'combined'));
+  batchDirection = 'forward';
+
+  // —— processWithMapping 端到端：解析 → 映射 → 分组 → 计税 ——
+  const colMap = { name: 0, month: 1, amount: 2, socialBase: 3, fundRate: 4, extraDeduction: 5, bonus: 6, city: 7 };
+  processWithMapping([
+    ['张三', '2026-01', '10000', '10000', '5%', '1000', '', '深圳'],
+    ['张三', '2026/2', '12000', '', '', '', '', ''],
+    ['合计', '', '22000', '', '', '', '', ''],
+    ['李四', '2026-01', '20000', '', '', '', '', '']
+  ], colMap, '回归测试.csv');
+  const parsed = window._batchParsed.parsed;
+  eq('批量解析·行数（剔除汇总行）', parsed.length, 3);
+  isTrue('批量解析·数值/公积金比例/专项附加/城市列',
+    parsed[0].amount === 10000 && parsed[0].fundRate === 0.05 && parsed[0].extraDeduction === 1000 && parsed[0].city === '深圳');
+  isTrue('批量解析·月份归一 2026/2→2026-02', parsed[1].month === '2026-02');
+  eq('批量分组·personKeys 人数', window._batchParsed.personKeys.length, 2);
+  const zsKey = window._batchParsed.personKeys.find(k => window._batchParsed.personsMap[k].records[0].city === '深圳');
+  const zsGroup = window._batchParsed.personsMap[zsKey];
+  const zsRows = runBatchSalaryPerson(zsGroup, zsGroup.records);
+  isTrue('批量端到端·深圳行内基数与引擎直算一致', (() => {
+    const siD = computeSocialInsuranceDetail(10000, '', resolvePolicy('shenzhen', '2026-01').items, 0.05);
+    return Math.abs(zsRows[0]._siDetail.total - siD.total) < 1e-9;
+  })());
+  const lsKey = window._batchParsed.personKeys.find(k => window._batchParsed.personsMap[k].name === '李四');
+  const lsGroup = window._batchParsed.personsMap[lsKey];
+  const lsRows = runBatchSalaryPerson(lsGroup, lsGroup.records);
+  isTrue('批量端到端·李四无基数记 0 标注', lsRows[0]._siMissing === true && lsRows[0]._siDetail === null);
+
+  // —— 劳务批量引擎级判定（逐行接线属 DOM 流程，见浏览器冒烟）——
+  isTrue('劳务断月重置·间隔超 1 个月判定', isGapMonth('2025-10', '2026-01') === true && isGapMonth('2026-01', '2026-02') === false);
+  isTrue('劳务新旧政策·2025-10 切换点', isNewPolicy('2025-09') === false && isNewPolicy('2025-10') === true);
+
+  Object.assign(salaryParams, saved);
+  batchDirection = savedBatch.dir;
+  batchCityId = savedBatch.city;
+  batchGrossAsBase = savedBatch.grossAsBase;
+  batchGapReset = savedBatch.gap;
+
+  const failed = t.filter(x => !x.ok);
+  const summary = `${t.length - failed.length}/${t.length} 通过`;
+  if (failed.length) {
+    console.group('🧪 批量流水线自检：' + summary);
+    failed.forEach(f => console.error(`✗ ${f.name}：期望 ${f.expected}，实际 ${f.actual}`));
+    console.groupEnd();
+  } else {
+    console.log('🧪 批量流水线自检： ' + summary);
+  }
+  return { passed: t.length - failed.length, total: t.length, failed };
+}
+
+// ==================== 导出器组装自检 ====================
+// buildSalaryFormulaGrid 边界：反算行、公积金基数独立、同月/跨年链、
+// 年终奖并入与单独行、缺基数行、身份列开关、备注注入、企业总成本公式。
+// 只测网格组装纯函数，不碰 XLSX/CDN IO（ensureXLSX 属浏览器冒烟）。
+
+function runExporterTests() {
+  const t = [];
+  const eq = (name, actual, expected, eps = 0.0001) => {
+    const ok = Math.abs(actual - expected) <= eps;
+    t.push({ name, ok, actual, expected });
+    return ok;
+  };
+  const isTrue = (name, cond) => eq(name, cond ? 1 : 0, 1);
+
+  const saved = JSON.parse(JSON.stringify(salaryParams));
+  salaryParams.cityId = 'custom';
+
+  const customItems = resolvePolicy('custom', '2026-01').items;
+  const mkRow = (over) => Object.assign({
+    month: '2026-01', person: '测试', preTax: 10000, postTax: 6697.5,
+    cumIncome: 10000, cumDeduction: 8250, taxableIncome: 1750, rate: 0.03, quick: 0,
+    cumTaxDue: 52.5, currentTax: 52.5, extraDeduction: 1000,
+    _siDetail: computeSocialInsuranceDetail(10000, '', customItems, 0.05),
+    _cumSI: 2250, _cumExtra: 1000, _isBonus: false, _bonusSeparate: false
+  }, over || {});
+  const OPTS = { chainKey: (r) => String(r.month || '').split('-')[0], cityOf: () => 'custom', nameOf: () => '测试', cityLabel: () => '自定义政策' };
+
+  // 1. 反算方向行：金额列为反算解出的应发，实发公式引用金额/三险一金/本期预扣
+  const gRev = buildSalaryFormulaGrid(
+    [mkRow({ preTax: 12337.11, postTax: 10000, cumTaxDue: 287.11, currentTax: 287.11, taxableIncome: 4087.11 })], OPTS);
+  isTrue('公式导出·反算行金额列=反算应发且实发公式引用', gRev.rows[0][4].v === 12337.11 && gRev.rows[0][31].f === 'E2-M2-AE2');
+  isTrue('公式导出·企业总成本公式 E2+S2 且缓存为数值', gRev.rows[0][32].f === 'E2+S2' && typeof gRev.rows[0][32].v === 'number');
+
+  // 2. 公积金基数独立于社保基数时常量写入
+  const gIndep = buildSalaryFormulaGrid(
+    [mkRow({ _siDetail: computeSocialInsuranceDetail(10000, 8000, customItems, 0.12) })], OPTS);
+  isTrue('公式导出·公积金基数独立时为常量 8000', gIndep.rows[0][6].v === 8000 && !gIndep.rows[0][6].f);
+
+  // 3. 同月第二行：减除费用公式 IF(...) 且缓存 0
+  const gSame = buildSalaryFormulaGrid([mkRow(), mkRow({ cumIncome: 20000 })], OPTS);
+  isTrue('公式导出·同月第二行减除公式 IF(...) 且缓存 0', gSame.rows[1][20].f.indexOf('IF(') === 0 && gSame.rows[1][20].v === 0);
+
+  // 4. 跨年链重启：累计应发公式重新从金额列起算
+  const gCross = buildSalaryFormulaGrid([mkRow(), mkRow({ month: '2027-01', cumIncome: 8000 })], OPTS);
+  isTrue('公式导出·跨年累计应发重启为金额引用', gCross.rows[1][21].f === 'E3');
+
+  // 5. 年终奖并入行：走普通累计链（项目=年终奖、减除列仍有公式）
+  const gComb = buildSalaryFormulaGrid(
+    [mkRow(), mkRow({ _isBonus: true, preTax: 38000, cumIncome: 48000 })], OPTS);
+  isTrue('公式导出·年终奖并入行走普通累计链',
+    gComb.rows[1][3].v === '年终奖' && !!gComb.rows[1][20].f && gComb.rows[1][20].f.indexOf('IF(') === 0);
+
+  // 6. 年终奖单独行：累计列全 null，税额用 ÷12 档公式
+  const gSep = buildSalaryFormulaGrid(
+    [mkRow(), mkRow({ _isBonus: true, _bonusSeparate: true, preTax: 36000, rate: 0.03, quick: 0, cumTaxDue: 1080, currentTax: 1080, postTax: 34920 })], OPTS);
+  isTrue('公式导出·年终奖单独行不进累计链',
+    gSep.rows[1][20] === null && gSep.rows[1][21] === null && gSep.rows[1][30].f === 'ROUND(MAX(0,E3*AA3-AB3),2)');
+
+  // 7. 缺基数行（_siDetail null）：三险一金列常量 0 无公式，税额公式仍在
+  const gMissing = buildSalaryFormulaGrid([mkRow({ _siDetail: null })], OPTS);
+  isTrue('公式导出·缺基数行三险一金为常量 0 且无公式',
+    gMissing.rows[0][12].v === 0 && !gMissing.rows[0][12].f && gMissing.rows[0][30].f.indexOf('MAX(0,') === 0);
+
+  // 8. 身份列开关：身份证/电话列插入后表头与列映射整体右移
+  const gId = buildSalaryFormulaGrid(
+    [mkRow({ idCard: '110101199001011234', phone: '13800138000' })], Object.assign({}, OPTS, { idCard: true, phone: true }));
+  isTrue('公式导出·身份列开关右移列映射', gId.headers.length === 36 && gId.rows[0][1].v === '110101199001011234' && gId.headers[3] === '月份');
+
+  // 9. 备注注入（反算等场景由调用方补充说明）
+  const gNote = buildSalaryFormulaGrid([mkRow()], Object.assign({}, OPTS, { noteExtra: () => '反算方向' }));
+  isTrue('公式导出·noteExtra 注入备注列', gNote.rows[0][33].v === '反算方向');
+
+  Object.assign(salaryParams, saved);
+
+  const failed = t.filter(x => !x.ok);
+  const summary = `${t.length - failed.length}/${t.length} 通过`;
+  if (failed.length) {
+    console.group('🧪 导出器组装自检：' + summary);
+    failed.forEach(f => console.error(`✗ ${f.name}：期望 ${f.expected}，实际 ${f.actual}`));
+    console.groupEnd();
+  } else {
+    console.log('🧪 导出器组装自检： ' + summary);
+  }
+  return { passed: t.length - failed.length, total: t.length, failed };
+}
+
+// ==================== 聚合入口 ====================
+
+/** 三套件聚合：浏览器自动执行与 node tests/run.js 共用同一入口 */
+function runAll() {
+  const suites = [
+    { name: '计税与政策库', result: runSelfTests() },
+    { name: '批量计税流水线', result: runBatchPipelineTests() },
+    { name: '导出器组装', result: runExporterTests() }
+  ];
+  const failed = [];
+  suites.forEach(s => s.result.failed.forEach(f => failed.push(Object.assign({ suite: s.name }, f))));
+  return {
+    passed: suites.reduce((a, s) => a + s.result.passed, 0),
+    total: suites.reduce((a, s) => a + s.result.total, 0),
+    failed,
+    suites: suites.map(s => ({ name: s.name, passed: s.result.passed, total: s.result.total, failed: s.result.failed }))
+  };
+}
+
+  window.TaxTest = { runSelfTests, runBatchPipelineTests, runExporterTests, runAll };
 })();

@@ -156,8 +156,8 @@
     setIncomeType('labor');
     PagePolicy.onPmCityChange();   // 政策库页初始化：城市下拉 + 编辑器 + 存储状态
 
-    // 自检（与旧版一致：初始化完成后运行，console 输出结果）
-    if (window.TaxTest) TaxTest.runSelfTests();
+    // 自检（初始化完成后运行，console 输出结果；node tests/run.js 跑同一份断言）
+    if (window.TaxTest) TaxTest.runAll();
   }
 
   window.App = { navigate, setIncomeType, init };

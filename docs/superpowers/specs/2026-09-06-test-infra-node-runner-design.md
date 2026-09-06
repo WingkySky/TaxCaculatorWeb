@@ -79,3 +79,12 @@ Node 24 + 约 30 行环境桩（`window = globalThis`、宽松 document element 
 | `js/self-tests.js` | 新增两套件函数、TaxTest 接口扩展；原 94 项不动 |
 | `js/app.js` | 仅 init 末尾自检入口调用一行：`runSelfTests()` → `runAll()` |
 | `README.md` | 回归门说明与自检总数更新 |
+
+## 实施记录（2026-09-06）
+
+已实施并验收通过：
+
+- 总量 126 项 = 计税与政策库 94 + 批量计税流水线 22 + 导出器组装 10（目标 ≥15/≥8，实际 22/10）。
+- `node tests/run.js` 在 Git Bash 与 PowerShell 均全绿退出码 0；file://（Edge 无头加载 `file:///`）经 app.js 自动执行 runAll，三套件全绿。
+- 断言名 diff 核对：`runSelfTests` 函数体零改动，原 94 项一条未丢；仅导入区扩展与文件头注释更新。
+- 被测源码零改动（页面侧 DOM 绑定由运行器宽松桩吸收）。实施中发现 Node 24 的 `navigator` 全局只读（strict 模式赋值抛错），而源码仅在剪贴板函数用到 navigator 且测试不触碰——运行器因此不桩 navigator。

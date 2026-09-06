@@ -1,0 +1,42 @@
+/* ============================================================
+ * print.css — 打印报告样式
+ * 职责：@media print 下隐藏应用界面，仅显示 #print-report 报告容器；
+ *       A4 纵向固定白底黑字（不随亮暗主题），表头跨页重复，逐人块不跨页撕裂。
+ * 屏幕上 #print-report 始终隐藏；报告由 PageReport.renderReport 填充。
+ * ============================================================ */
+
+#print-report { display: none; }
+
+@media print {
+  @page { size: A4 portrait; margin: 14mm 12mm; }
+
+  body > *:not(#print-report) { display: none !important; }
+  #print-report {
+    display: block !important;
+    color: #1a1a1a;
+    background: #fff;
+    font-size: 12px;
+    line-height: 1.5;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  #print-report .pr-head { text-align: center; border-bottom: 2px solid #1a3a6b; padding-bottom: 8px; margin-bottom: 12px; }
+  #print-report .pr-title { font-size: 18px; font-weight: 700; color: #1a3a6b; }
+  #print-report .pr-sub { font-size: 11px; color: #666; margin-top: 3px; }
+
+  #print-report .pr-section { font-size: 13px; font-weight: 700; color: #1a3a6b; margin: 14px 0 6px; }
+
+  #print-report table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  #print-report th, #print-report td { padding: 3px 4px; text-align: left; }
+  #print-report thead { display: table-header-group; }
+  #print-report thead tr { background: #1a3a6b; color: #fff; }
+  #print-report tbody tr { border-bottom: 1px solid #eee; }
+  #print-report .pr-total { background: #eef2f8; font-weight: 700; }
+  #print-report .pr-params td:first-child { color: #666; width: 35%; }
+
+  #print-report .pr-person { border: 1px solid #d8dfe9; border-radius: 4px; padding: 8px; margin-top: 8px; page-break-inside: avoid; }
+  #print-report .pr-person-head { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding-bottom: 4px; font-weight: 700; }
+
+  #print-report .pr-foot { margin-top: 16px; padding-top: 6px; border-top: 1px solid #ddd; font-size: 10px; color: #999; }
+}

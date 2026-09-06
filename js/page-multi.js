@@ -475,6 +475,7 @@ function renderMultiResults(results, plan) {
         <span style="display:flex;gap:8px;">
           ${isSalary ? `<button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" onclick="PageMulti.exportMultiExcelFormula()"> 导出 Excel（公式明细）</button>` : ''}
           <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" onclick="PageMulti.exportMultiCSV()"> 导出 CSV</button>
+          <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" onclick="PageReport.printReport('multi')"> 打印报告</button>
         </span>
       </div>
       <div style="overflow-x:auto;">

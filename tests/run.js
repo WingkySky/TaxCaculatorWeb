@@ -39,7 +39,7 @@ globalThis.location = { hash: '', href: '' };
   'js/social-insurance.js', 'js/exporter.js', 'js/ui.js', 'js/page-shared.js',
   'js/page-multi.js',
   'js/batch-parse.js', 'js/batch-calc.js', 'js/batch-source.js', 'js/batch-view.js', 'js/batch-export.js',
-  'js/page-batch.js', 'js/page-params.js', 'js/self-tests.js'
+  'js/page-batch.js', 'js/page-params.js', 'js/page-rules.js', 'js/print-report.js', 'js/self-tests.js'
 ].forEach(f => require(path.join(ROOT, f)));
 
 const r = window.TaxTest.runAll();

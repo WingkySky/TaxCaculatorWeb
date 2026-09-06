@@ -16,6 +16,7 @@
   const { buildBonusSeparateRow } = PageMulti;
   const { detectColumnMapping, groupPersons, makeBatchBonusSeparateRow, processWithMapping,
     runBatchLaborPass, runBatchSalaryPass, runBatchSalaryPerson } = PageBatch;
+  const { buildBatchReportData, buildMultiReportData, maskBankCard, maskIdCard, maskPhone } = PageReport;
 
 // ==================== Self tests ====================
 // 控制台自检：城市政策库、逐险种 clamp、年度匹配、工资累计预扣、反算、劳务回归。
@@ -552,6 +553,26 @@ function runExporterTests() {
   // 9. 备注注入（反算等场景由调用方补充说明）
   const gNote = buildSalaryFormulaGrid([mkRow()], Object.assign({}, OPTS, { noteExtra: () => '反算方向' }));
   isTrue('公式导出·noteExtra 注入备注列', gNote.rows[0][33].v === '反算方向');
+
+  // —— 打印报告组装与脱敏（PageReport）——
+  isTrue('打印报告·身份证脱敏', maskIdCard('110101199001011234') === '1101**********1234');
+  isTrue('打印报告·电话脱敏', maskPhone('13800138000') === '138****8000');
+  isTrue('打印报告·银行卡脱敏', maskBankCard('6222021234561234567') === '****4567');
+  isTrue('打印报告·批量组装：分组/小计/总计/脱敏/月份范围', (() => {
+    const env = { incomeType: 'salary', direction: 'forward', params: [], policyLine: '', inLabel: '应发工资', outLabel: '实发工资' };
+    const d = buildBatchReportData([
+      { personKey: 'ID:110101199001011234', person: '张三', idCard: '110101199001011234', month: '2026-01', preTax: 10000, socialInsurance: 1750, extraDeduction: 1000, currentTax: 52.5, postTax: 8197.5 },
+      { personKey: 'ID:110101199001011234', person: '张三', idCard: '110101199001011234', month: '2026-02', preTax: 12000, socialInsurance: 1750, extraDeduction: 1000, currentTax: 170, postTax: 10080 },
+      { personKey: 'P:13800138000', person: '李四', phone: '13800138000', month: '2026-01', preTax: 8000, socialInsurance: 1400, extraDeduction: 0, currentTax: 0, postTax: 6600 }
+    ], env);
+    const zs = d.groups.find(g => g.person === '张三');
+    return d.personCount === 2 && zs && zs.rows.length === 2
+      && zs.idLine.indexOf('1101**********1234') >= 0
+      && Math.abs(zs.subtotal.in - 22000) < 1e-9
+      && Math.abs(d.totals.in - 30000) < 1e-9 && Math.abs(d.totals.tax - 222.5) < 1e-9
+      && d.monthRange === '2026-01 ~ 2026-02';
+  })());
+  isTrue('打印报告·空结果防呆返回 null', buildBatchReportData([], {}) === null && buildMultiReportData([], {}) === null);
 
   Object.assign(salaryParams, saved);
 

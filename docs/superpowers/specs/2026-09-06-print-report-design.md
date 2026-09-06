@@ -93,3 +93,5 @@
 2. **按钮风格**：批量页打印按钮 `btn-secondary` → `btn-green`，与相邻导出按钮统一（输出类动作为绿色）。
 
 **验收教训**：此前冒烟只断言了报告 DOM 填充，未覆盖真实打印通道（打印媒体下的呈现），导致结构 bug 漏网；本轮补充断言 `print-report.parentElement === document.body` 与延迟打印时序，最终打印效果仍需用户 Ctrl+P 复验。
+
+3. **报告表头出现 undefined**（同日用户截图反馈）：`collectMultiEnv/collectBatchEnv` 解构 `incomeIOLabels` 返回值时误用自造键名 `inLabel/outLabel`（实际返回 `{ dirLabel, preLabel, postLabel }`）。修复为解构 `preLabel/postLabel` 再映射；期间一次改法把重命名语法写反（`outLabel: postLabel`）仍取到 undefined，浏览器复验抓出后改正。**测试盲区记录**：Node 断言手写 env（键名恰好与组装函数一致），错配点在「收集函数 ↔ 真实返回值」之间，单测天然覆盖不到——由浏览器冒烟补一条「报告文本不含 undefined」的断言口径（本轮人工执行通过）。

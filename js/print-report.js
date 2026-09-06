@@ -153,8 +153,8 @@ function collectMultiEnv() {
     params.push(['断月重置', gapEl && gapEl.checked ? '开启（间隔超 1 个月累计归零）' : '关闭']);
     policyLine = '2025 年 10 月 1 日起适用新政策（累计预扣法），此前月份按旧政策（生产经营所得，不扣税）。';
   }
-  const { inLabel, outLabel } = incomeIOLabels(multiDirection, '期望实发（已知）');
-  return { incomeType, direction: multiDirection, params, policyLine, inLabel, outLabel };
+  const { preLabel, postLabel } = incomeIOLabels(multiDirection, '期望实发（已知）');
+  return { incomeType, direction: multiDirection, params, policyLine, inLabel: preLabel, outLabel: postLabel };
 }
 
 /** 批量参数分节：整批城市 / 按应发作基数 / 断月重置 */
@@ -175,8 +175,8 @@ function collectBatchEnv() {
     params.push(['断月重置', batchGapReset ? '开启（间隔超 1 个月累计归零）' : '关闭']);
     policyLine = '2025 年 10 月 1 日起适用新政策（累计预扣法），此前月份按旧政策（不扣税）。';
   }
-  const { inLabel, outLabel } = incomeIOLabels(batchDirection);
-  return { incomeType, direction: batchDirection, params, policyLine, inLabel, outLabel };
+  const { preLabel, postLabel } = incomeIOLabels(batchDirection);
+  return { incomeType, direction: batchDirection, params, policyLine, inLabel: preLabel, outLabel: postLabel };
 }
 
 /** 组装报告 HTML 填充隐藏容器 */

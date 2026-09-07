@@ -6,8 +6,8 @@
 (function () {
 'use strict';
   const { round2, downloadFile } = TaxUtils;
-  const { CITY_POLICY_LIBRARY, FUND_RATES_STD, SI_ITEMS, SI_ITEM_LABELS, _policyCache, clearPolicyLibraryStorage,
-    fundItem, libraryToRows, normalizePolicyLibrary, rowsToLibrary, savePolicyLibrary, siItem } = PolicyLib;
+  const { CITY_POLICY_LIBRARY, FUND_RATES_STD, SI_ITEMS, SI_ITEM_LABELS, _policyCache,
+    fundItem, libraryToRows, normalizePolicyLibrary, officialDiffFor, restoreOfficialAll, restoreOfficialValue, rowsToLibrary, savePolicyLibrary, siItem } = PolicyLib;
   const { ensureXLSX, saveWorkbook } = Exporter;
   const { buildCityOptions, onCityParamChange, renderSalaryItemsTable } = PageParams;
 
@@ -106,10 +106,14 @@ function updatePmStorageStatus() {
     el.innerHTML = ' 当前浏览器环境不支持本地存储（如隐私模式），修改仅本次会话有效——请务必导出 Excel / JSON 备份。';
     return;
   }
+  const remote = window._policyRemoteInfo;
+  const remoteNote = remote
+    ? `官方数据已自动更新 ${remote.from} → ${remote.to}，<strong>${remote.modified ? remote.modified + ' 处本地修改已保留' : '你的数据已同步到最新'}</strong>（标 ⟲ 字段可恢复官方值）。`
+    : '';
   if (window._policyFromStorage) {
-    el.innerHTML = ` 政策数据已自动保存到本机浏览器（localStorage${window._policySavedAt ? '，更新于 ' + window._policySavedAt : ''}），刷新/重启后自动加载。<strong>不跨浏览器、不跨电脑，清除浏览器数据会丢失</strong>——跨机或长期备份请导出 Excel / JSON。`;
+    el.innerHTML = ` ${remoteNote}政策数据已自动保存到本机浏览器（localStorage${window._policySavedAt ? '，更新于 ' + window._policySavedAt : ''}），刷新/重启后自动加载。<strong>不跨浏览器、不跨电脑，清除浏览器数据会丢失</strong>——跨机或长期备份请导出 Excel / JSON。`;
   } else {
-    el.innerHTML = '当前使用 tax-policy-data.js 的默认数据；在下方修改后会自动保存到本机浏览器，之后每次打开自动加载。';
+    el.innerHTML = ` ${remoteNote}当前使用官方默认数据（线上访问自动更新，本地双击打开时由 tax-policy-data.js 提供）；在下方修改后会自动保存到本机浏览器，之后每次打开自动加载。`;
   }
 }
 
@@ -127,6 +131,23 @@ function renderPolicyEditor() {
   effStart.value = rec.effective ? rec.effective[0] : '';
   effEnd.value = rec.effective ? rec.effective[1] : '';
   label.value = rec.label || '';
+  const diff = officialDiffFor(window._pmCity, window._pmYear);
+  /** 官方值展示（恢复按钮 title 用） */
+  const fmtOfficial = (field, v) => {
+    if (v == null) return '不限';
+    if (field === 'personal' || field === 'employer') return round2(v * 100) + '%';
+    if (field === 'rates') return v.map(r => round2(r * 100)).join(',');
+    return String(v);
+  };
+  /** 本地已改字段的「恢复官方值」角标 */
+  const badge = (itemKey, field) => {
+    // 官方值可能合法为 null（不限），必须按「存在 diff 条目」判断而非仅判值
+    if (!diff || !diff[itemKey] || !(field in diff[itemKey])) return '';
+    const off = diff[itemKey][field];
+    const ck = window._pmCity, yk = window._pmYear;
+    return ` <button type="button" class="pm-restore-btn" title="本地已修改（官方值：${fmtOfficial(field, off)}）。点击恢复官方值"
+      onclick="PagePolicy.onPmRestoreField('${ck}','${yk}','${itemKey}','${field}')">⟲</button>`;
+  };
   const numInput = (cityKey, yk, itemKey, field, value, step, placeholder) =>
     `<input class="pm-item-input" type="number" step="${step}" placeholder="${placeholder || ''}" value="${value == null ? '' : value}"
       onchange="PagePolicy.onPmItemInput('${cityKey}','${yk}','${itemKey}','${field}',this.value)">`;
@@ -141,18 +162,18 @@ function renderPolicyEditor() {
             const isFund = it.key === 'fund';
             return `<tr>
               <td>${it.label}${item.pending ? ' <span style="color:var(--t-warning);font-size:10px;">待核对</span>' : ''}</td>
-              <td>${numInput(window._pmCity, window._pmYear, it.key, 'personal', round2((item.personal || 0) * 100), 0.1, '8')}</td>
-              <td>${numInput(window._pmCity, window._pmYear, it.key, 'employer', item.employer == null ? '' : round2(item.employer * 100), 0.1, isFund ? '同个人档' : '0')}</td>
-              <td>${numInput(window._pmCity, window._pmYear, it.key, 'lower', item.lower, 0.01, '不限')}</td>
-              <td>${numInput(window._pmCity, window._pmYear, it.key, 'upper', item.upper, 0.01, '不限')}</td>
+              <td>${numInput(window._pmCity, window._pmYear, it.key, 'personal', round2((item.personal || 0) * 100), 0.1, '8')}${badge(it.key, 'personal')}</td>
+              <td>${numInput(window._pmCity, window._pmYear, it.key, 'employer', item.employer == null ? '' : round2(item.employer * 100), 0.1, isFund ? '同个人档' : '0')}${badge(it.key, 'employer')}</td>
+              <td>${numInput(window._pmCity, window._pmYear, it.key, 'lower', item.lower, 0.01, '不限')}${badge(it.key, 'lower')}</td>
+              <td>${numInput(window._pmCity, window._pmYear, it.key, 'upper', item.upper, 0.01, '不限')}${badge(it.key, 'upper')}</td>
               <td>${isFund ? `<input class="pm-item-input" value="${(item.rates || []).map(r => round2(r * 100)).join(',')}"
-                    onchange="PagePolicy.onPmFundRatesInput(this.value)">` : '<span style="color:var(--t-text-2);">—</span>'}</td>
+                    onchange="PagePolicy.onPmFundRatesInput(this.value)">${badge(it.key, 'rates')}` : '<span style="color:var(--t-text-2);">—</span>'}</td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>
     </div>
-    <div style="font-size:11px;color:var(--t-text-2);margin-top:6px;">比例与上下限留空表示不限制；公积金单位比例留空表示与个人同档；修改后立即生效（编辑过的险种会移除「待核对」标记）。</div>`;
+    <div style="font-size:11px;color:var(--t-text-2);margin-top:6px;">比例与上下限留空表示不限制；公积金单位比例留空表示与个人同档；修改后立即生效（编辑过的险种会移除「待核对」标记）${diff ? '；与官方默认不同的字段标 <span class="pm-restore-btn" style="cursor:default;">⟲</span>，点击可恢复官方值' : ''}。</div>`;
 }
 
 function onPmItemInput(cityKey, yk, itemKey, field, value) {
@@ -260,25 +281,19 @@ function pmDeleteYear() {
   onPmCityChange();
 }
 
-/** 清除本机存档，恢复为 tax-policy-data.js 种子数据 */
+/** 单字段恢复官方值（⟲ 角标点击） */
+function onPmRestoreField(cityKey, yk, itemKey, field) {
+  if (!restoreOfficialValue(cityKey, yk, itemKey, field)) return;
+  renderPolicyEditor();
+  renderSalaryItemsTable();
+}
+
+/** 清除本机存档，恢复为官方默认数据（保留「自定义」城市） */
 function pmResetToSeed() {
-  if (!confirm('将清除本机浏览器中保存的政策数据，恢复为 tax-policy-data.js 中的默认数据，确认？')) return;
-  clearPolicyLibraryStorage();
-  const seed = (window.CITY_POLICY_LIBRARY_DATA && typeof window.CITY_POLICY_LIBRARY_DATA === 'object')
-    ? JSON.parse(JSON.stringify(window.CITY_POLICY_LIBRARY_DATA))
-    : null;
-  Object.keys(CITY_POLICY_LIBRARY).forEach(k => delete CITY_POLICY_LIBRARY[k]);
-  if (seed) {
-    Object.assign(CITY_POLICY_LIBRARY, seed);
-    normalizePolicyLibrary(CITY_POLICY_LIBRARY);
-  } else if (!CITY_POLICY_LIBRARY.custom) {
-    CITY_POLICY_LIBRARY.custom = defaultCustomCity();
-  }
+  if (!confirm('将清除本机浏览器中保存的政策数据，恢复为官方默认数据（新增城市与自定义政策会保留），确认？')) return;
+  restoreOfficialAll();
   if (!CITY_POLICY_LIBRARY[salaryParams.cityId]) salaryParams.cityId = 'custom';
   window._pmCity = CITY_POLICY_LIBRARY[salaryParams.cityId] ? salaryParams.cityId : Object.keys(CITY_POLICY_LIBRARY)[0];
-  window._policyFromStorage = false;
-  window._policySavedAt = '';
-  _policyCache.clear();
   onPmCityChange();
   syncCitySelects();
 }
@@ -362,5 +377,5 @@ function pmImportJSON(input) {
 }
 
 
-  window.PagePolicy = { applyImportedLibrary,closePolicyModal,onPmCityChange,onPmEffectiveChange,onPmFundRatesInput,onPmItemInput,onPmLabelChange,onPmYearChange,openPolicyModal,pmAddCity,pmAddYear,pmCityOptionsHTML,pmDeleteYear,pmExportExcel,pmExportJSON,pmImportExcel,pmImportJSON,pmResetToSeed,renderPolicyEditor,updatePmStorageStatus };
+  window.PagePolicy = { applyImportedLibrary,closePolicyModal,onPmCityChange,onPmEffectiveChange,onPmFundRatesInput,onPmItemInput,onPmLabelChange,onPmRestoreField,onPmYearChange,openPolicyModal,pmAddCity,pmAddYear,pmCityOptionsHTML,pmDeleteYear,pmExportExcel,pmExportJSON,pmImportExcel,pmImportJSON,pmResetToSeed,renderPolicyEditor,updatePmStorageStatus };
 })();

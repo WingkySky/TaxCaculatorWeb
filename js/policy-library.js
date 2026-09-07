@@ -1,8 +1,9 @@
 /* ============================================================
  * policy-library.js — PolicyLib 城市社保公积金政策库
- * 职责：政策库结构定义、localStorage 三层持久化、normalize 规范化、
+ * 职责：政策库结构定义、持久化（官方层 + 本机存档两层）、三方合并、
+ *       远端数据通道（fetch tax-policy-data.json）、normalize 规范化、
  *       按城市+月份解析政策（resolvePolicy）、基数 clamp、Excel 行转换。
- * 对外接口：window.PolicyLib。依赖：TaxUtils、tax-policy-data.js 种子。
+ * 对外接口：window.PolicyLib。依赖：TaxUtils、tax-policy-data.js 兜底种子。
  * ============================================================ */
 (function () {
 'use strict';
@@ -12,7 +13,7 @@
  * 三层结构：城市 → 年度（含生效月区间）→ 险种（养老/医疗(含生育)/失业/工伤/公积金）
  * 每个险种：personal 个人比例(小数)、employer 单位比例(小数)、lower/upper 基数上下限（null = 不限）
  * 公积金额外：rates 可选比例数组（公司择档 5%~12%）；fund.employer 缺省表示单位与个人同档
- * 内置数值为参考值（pending: true），请以当地社保部门公布为准，可在政策管理弹层修改/导入。
+ * 内置数值为参考值（pending: true），请以当地社保部门公布为准，可在政策库页修改/导入。
  */
 function siItem(personal, lower, upper, employer) { return { personal: personal, lower: lower, upper: upper, employer: employer || 0 }; }
 function fundItem(rates, personal, lower, upper, employer) {
@@ -32,14 +33,20 @@ const SI_ITEM_LABELS = { pension: '养老', medical: '医疗(含生育)', unempl
 
 const FUND_RATES_STD = [0.05, 0.06, 0.08, 0.10, 0.12];
 
-/* ==================== 政策库持久化（localStorage） ====================
- * 数据分三层：
- *   1. tax-policy-data.js —— 出厂种子（跨机拷贝即用）；
- *   2. localStorage —— 本机自动存档：弹层编辑/导入后自动写入，刷新自动加载；
- *   3. Excel / JSON 导出 —— 人工备份与跨机同步。
- * localStorage 不跨浏览器、不跨电脑，清除浏览器数据会丢失；恢复种子用「恢复数据文件默认」。
+/* ==================== 官方层 + 本机存档（两层持久化） ====================
+ * 数据分两层，所有权分离：
+ *   官方层（远端/种子负责，随版本推送）：tax-policy-data.json（线上唯一数据源，
+ *     版本号 YYYY.MM）→ file:// 兜底由同目录 tax-policy-data.js 提供。
+ *   本机存档（localStorage，用户负责）：弹层编辑/导入后自动写入，含
+ *     __baseData（保存时的官方层快照）用于三方合并。
+ * 远端更新到达时按字段三方合并：用户未改的字段自动更新到官方新值；
+ * 用户改过的字段保留用户值并在政策库页标注（可一键恢复官方值）；
+ * 「自定义」城市及用户新增的城市/年度永远不被触碰。
+ * 版本低于官方层已知版本时合并自动跳过（不会回退）。
  */
 const POLICY_LIB_STORAGE_KEY = 'taxPolicyLibrary_v1';
+
+function deepClone(v) { return JSON.parse(JSON.stringify(v)); }
 
 function policyStorageAvailable() {
   try {
@@ -52,31 +59,50 @@ function policyStorageAvailable() {
   }
 }
 
-/** 从 localStorage 读取本机存档；无数据或不可用时返回 null */
+function nowStamp() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+/** 从 localStorage 读取本机存档；无数据或不可用时返回 null。
+ *  兼容 v1 旧存档（整库快照）与 v2（data + __baseData 官方基线）。 */
 function loadPolicyLibrary() {
   try {
     const raw = localStorage.getItem(POLICY_LIB_STORAGE_KEY);
     if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (!data || typeof data !== 'object' || !Object.keys(data).length) return null;
-    window._policySavedAt = data.__savedAt || '';
+    const payload = JSON.parse(raw);
+    if (!payload || typeof payload !== 'object') return null;
+    if (payload.__v === 2 && payload.data && typeof payload.data === 'object' && Object.keys(payload.data).length) {
+      return {
+        data: payload.data,
+        savedAt: payload.__savedAt || '',
+        baseVersion: payload.__baseVersion || null,
+        baseData: (payload.__baseData && typeof payload.__baseData === 'object') ? payload.__baseData : null
+      };
+    }
+    // v1 旧存档：除 __savedAt 外都是城市表
+    const data = JSON.parse(JSON.stringify(payload));
     delete data.__savedAt;
-    window._policyFromStorage = true;
-    return data;
+    if (!Object.keys(data).length) return null;
+    return { data: data, savedAt: payload.__savedAt || '', baseVersion: null, baseData: null };
   } catch (e) {
     return null;
   }
 }
 
-/** 政策库变更后写本机存档；不可用时静默降级（弹层会提示仅本次会话有效） */
+/** 政策库变更后写本机存档（含官方基线快照）；不可用时静默降级（政策库页会提示仅本次会话有效） */
 function savePolicyLibrary() {
   try {
-    const payload = JSON.parse(JSON.stringify(CITY_POLICY_LIBRARY));
-    const d = new Date();
-    window._policySavedAt = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
-      String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-    payload.__savedAt = window._policySavedAt;
+    const payload = {
+      __v: 2,
+      __savedAt: nowStamp(),
+      __baseVersion: OFFICIAL_VERSION,
+      __baseData: deepClone(OFFICIAL_CITIES),
+      data: deepClone(CITY_POLICY_LIBRARY)
+    };
     localStorage.setItem(POLICY_LIB_STORAGE_KEY, JSON.stringify(payload));
+    window._policySavedAt = payload.__savedAt;
     window._policyFromStorage = true;
     window._policyStorageAvailable = true;
     return true;
@@ -91,35 +117,57 @@ function clearPolicyLibraryStorage() {
   try { localStorage.removeItem(POLICY_LIB_STORAGE_KEY); } catch (e) { /* 忽略 */ }
 }
 
-/* 政策库数据外置在同目录 tax-policy-data.js（跨机使用时拷贝该文件即可自动加载）。
- * 加载优先级：本机 localStorage 存档 > tax-policy-data.js 种子 > 仅「自定义」城市。 */
-const CITY_POLICY_LIBRARY = loadPolicyLibrary() ||
-  ((window.CITY_POLICY_LIBRARY_DATA && typeof window.CITY_POLICY_LIBRARY_DATA === 'object')
-    ? window.CITY_POLICY_LIBRARY_DATA
-    : {
-      custom: {
-        name: '自定义',
-        years: {
-          custom: {
-            label: '自定义政策',
-            effective: ['2000-01', '2999-12'],
-            pending: true,
-            items: {
-              pension:      siItem(0.08, null, null, 0.16),
-              medical:      siItem(0.02, null, null, 0.08),
-              unemployment: siItem(0.005, null, null, 0.005),
-              injury:       siItem(0, null, null, 0.002),
-              fund:         fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
-            }
+/* 兜底「自定义」城市（tax-policy-data.js 缺失时仅剩它） */
+function defaultCustomCity() {
+  return {
+    custom: {
+      name: '自定义',
+      years: {
+        custom: {
+          label: '自定义政策',
+          effective: ['2000-01', '2999-12'],
+          pending: true,
+          items: {
+            pension:      siItem(0.08, null, null, 0.16),
+            medical:      siItem(0.02, null, null, 0.08),
+            unemployment: siItem(0.005, null, null, 0.005),
+            injury:       siItem(0, null, null, 0.002),
+            fund:         fundItem(FUND_RATES_STD.slice(), 0.05, null, null)
           }
         }
       }
-    });
+    }
+  };
+}
+
+/* ---- 官方层初始化：本机存档基线 > 兜底种子 ---- */
+const scriptSeed = (window.CITY_POLICY_LIBRARY_DATA && typeof window.CITY_POLICY_LIBRARY_DATA === 'object')
+  ? window.CITY_POLICY_LIBRARY_DATA : null;
+const _archive = loadPolicyLibrary();
+
+let OFFICIAL_VERSION = (_archive && _archive.baseVersion) || window.CITY_POLICY_LIBRARY_VERSION || null;
+let OFFICIAL_CITIES = (_archive && _archive.baseData) ||
+  (scriptSeed ? deepClone(scriptSeed) : null) ||
+  deepClone(defaultCustomCity());
+if (!OFFICIAL_VERSION) OFFICIAL_VERSION = '0.0';
+
+/* 工作库：存档数据（尚未与官方层合并时保持原样，远端通道/启动种子更新时再合并）
+ * 或官方层副本。custom 城市在任何官方数据缺失时兜底补入。 */
+const CITY_POLICY_LIBRARY = _archive
+  ? _archive.data
+  : (scriptSeed ? deepClone(scriptSeed) : deepClone(defaultCustomCity()));
+if (!CITY_POLICY_LIBRARY.custom) {
+  const dc = defaultCustomCity().custom;
+  // 追加到末尾，保持「自定义」永远排在城市表最后
+  CITY_POLICY_LIBRARY.custom = dc;
+}
+window._policySavedAt = (_archive && _archive.savedAt) || '';
+window._policyFromStorage = !!_archive;
 window._policyStorageAvailable = policyStorageAvailable();
 
 /**
  * 政策库规范化：险种按 SI_ITEMS 顺序重排、字段按规范顺序重建；
- * 旧版本存档（无单位比例 employer / 无工伤 injury）从种子按字段级回退补齐，
+ * 旧版本存档（无单位比例 employer / 无工伤 injury）从兜底种子按字段级回退补齐，
  * 只补缺失字段，不覆盖用户已改过的任何数值。
  */
 function normalizePolicyLibrary(lib) {
@@ -156,6 +204,206 @@ function normalizePolicyLibrary(lib) {
   });
 }
 normalizePolicyLibrary(CITY_POLICY_LIBRARY);
+
+/* ==================== 版本比较与三方合并 ==================== */
+
+/** 版本号比较（"YYYY.MM"）：返回 -1 / 0 / 1；非法段按 0 处理 */
+function compareVersions(a, b) {
+  const pa = String(a || '0').split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b || '0').split('.').map(n => parseInt(n, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
+/* 顺序无关的值相等（对象键序不敏感；数组序敏感） */
+function valueEqual(a, b) {
+  if (a === b) return true;
+  if (a == null || b == null || typeof a !== 'object' || typeof b !== 'object') return a === b;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) return a.length === b.length && a.every((v, i) => valueEqual(v, b[i]));
+  const ka = Object.keys(a).filter(k => a[k] !== undefined);
+  const kb = Object.keys(b).filter(k => b[k] !== undefined);
+  return ka.length === kb.length && ka.every(k => k in b && valueEqual(a[k], b[k]));
+}
+
+/** 键集合并：先远端后本地（官方排序优先，本地独有键追加在后） */
+function unionKeys(remoteKeys, userKeys) {
+  const seen = {};
+  const out = [];
+  remoteKeys.concat(userKeys).forEach(k => { if (!seen[k]) { seen[k] = 1; out.push(k); } });
+  return out;
+}
+
+/**
+ * 三方合并：base=用户数据当时的官方层，user=用户工作库，remote=官方新层。
+ * 规则（自顶向下逐级套用）：
+ *   · 仅远端有 → 采纳官方（新增城市/年度/险种）；
+ *   · 仅本地有 → 保留本地（自定义城市、用户新增城市/年度/险种，官方删改不波及）；
+ *   · 两边都有 → 逐字段三方判定：用户值 == 基线值（未改过）→ 采纳远端新值；
+ *     用户值 != 基线值（改过）→ 保留用户值。base 缺失时保守保留本地。
+ */
+function mergeLibrary(base, user, remote) {
+  function mergeYearRec(yb, yu, yr) {
+    const rec = {};
+    rec.label = valueEqual(yu.label, yb.label) ? yr.label : yu.label;
+    rec.effective = valueEqual(yu.effective, yb.effective) ? yr.effective : yu.effective;
+    rec.pending = valueEqual(yu.pending, yb.pending) ? yr.pending : yu.pending;
+    const items = {};
+    const iks = unionKeys(Object.keys(yr.items || {}), Object.keys(yu.items || {}));
+    iks.forEach(ik => {
+      const iu = yu.items && yu.items[ik], ir = yr.items && yr.items[ik], ib = yb.items && yb.items[ik];
+      if (iu == null && ir != null) { items[ik] = deepClone(ir); return; }
+      if (iu != null && ir == null) { items[ik] = deepClone(iu); return; }
+      if (iu != null && ir != null && ib == null) { items[ik] = deepClone(iu); return; }
+      const item = {};
+      Object.keys(ir).forEach(f => { item[f] = valueEqual(iu[f], ib[f]) ? ir[f] : iu[f]; });
+      Object.keys(iu).forEach(f => { if (!(f in item)) item[f] = iu[f]; }); // 用户扩展字段保留
+      items[ik] = item;
+    });
+    rec.items = items;
+    return rec;
+  }
+  function mergeCity(cb, cu, cr) {
+    const city = { name: valueEqual(cu.name, cb.name) ? cr.name : cu.name, years: {} };
+    unionKeys(Object.keys(cr.years), Object.keys(cu.years)).forEach(yk => {
+      const yu = cu.years[yk], yr = cr.years[yk], yb = cb.years && cb.years[yk];
+      if (yu == null && yr != null) { city.years[yk] = deepClone(yr); return; }
+      if (yu != null && yr == null) { city.years[yk] = deepClone(yu); return; }
+      if (yu != null && yr != null && yb == null) { city.years[yk] = deepClone(yu); return; }
+      city.years[yk] = mergeYearRec(yb, yu, yr);
+    });
+    return city;
+  }
+  const merged = {};
+  unionKeys(Object.keys(remote), Object.keys(user)).forEach(ck => {
+    const cu = user[ck], cr = remote[ck], cb = base && base[ck];
+    if (cu == null && cr != null) { merged[ck] = deepClone(cr); return; }
+    if (cu != null && cr == null) { merged[ck] = deepClone(cu); return; }
+    if (cu != null && cr != null && (ck === 'custom' || cb == null)) { merged[ck] = deepClone(cu); return; }
+    merged[ck] = mergeCity(cb, cu, cr);
+  });
+  return merged;
+}
+
+/** 应用远端官方数据（{version, cities}）。版本不高于已知官方层时跳过；
+ *  返回 { from, to } 或 null。合并后自动写本机存档并派发 policy:remote-applied 事件。 */
+function applyRemoteOfficial(json) {
+  if (!json || typeof json !== 'object') return null;
+  const cities = json.cities;
+  if (!cities || typeof cities !== 'object' || !Object.keys(cities).length) return null;
+  if (typeof json.version !== 'string' || !json.version) return null;
+  if (compareVersions(json.version, OFFICIAL_VERSION) <= 0) return null;
+  const from = OFFICIAL_VERSION;
+  const merged = mergeLibrary(OFFICIAL_CITIES, CITY_POLICY_LIBRARY, cities);
+  Object.keys(CITY_POLICY_LIBRARY).forEach(k => delete CITY_POLICY_LIBRARY[k]);
+  Object.assign(CITY_POLICY_LIBRARY, merged);
+  if (!CITY_POLICY_LIBRARY.custom) CITY_POLICY_LIBRARY.custom = defaultCustomCity().custom;
+  normalizePolicyLibrary(CITY_POLICY_LIBRARY);
+  OFFICIAL_CITIES = deepClone(cities);
+  OFFICIAL_VERSION = json.version;
+  _policyCache.clear();
+  savePolicyLibrary();
+  const info = { from: from, to: json.version, modified: modifiedFieldCount() };
+  try { window.dispatchEvent(new CustomEvent('policy:remote-applied', { detail: info })); } catch (e) { /* 环境不支持事件则忽略 */ }
+  return info;
+}
+
+/** 远端数据通道：http(s) 环境拉取同目录 tax-policy-data.json（no-cache 保证及时性）；
+ *  file:// 双击场景静默跳过（由 tax-policy-data.js 兜底种子承担官方层）。 */
+function initRemotePolicy() {
+  if ((location.protocol || '') === 'file:') return Promise.resolve(null);
+  if (typeof fetch !== 'function') return Promise.resolve(null);
+  return fetch('tax-policy-data.json', { cache: 'no-cache' })
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(json => applyRemoteOfficial(json))
+    .catch(err => {
+      console.info('政策库远端更新检查未执行：' + (err && err.message ? err.message : err));
+      return null;
+    });
+}
+
+/** 启动期官方层更新检查（file:// 换新种子文件 / 存档基线落后于兜底种子时） */
+function applySeedUpdateIfNewer() {
+  if (!scriptSeed || !window.CITY_POLICY_LIBRARY_VERSION) return null;
+  if (compareVersions(window.CITY_POLICY_LIBRARY_VERSION, OFFICIAL_VERSION) <= 0) return null;
+  return applyRemoteOfficial({ version: window.CITY_POLICY_LIBRARY_VERSION, cities: scriptSeed });
+}
+
+/* ==================== 本地改动标记 ==================== */
+
+/** 指定（城市, 年度）相对官方层的本地改动：
+ *  { __rec: { label/effective/pending: 官方值 }, [险种key]: { 字段: 官方值 } }；无改动返回 null */
+function officialDiffFor(cityKey, yearKey) {
+  const rec = CITY_POLICY_LIBRARY[cityKey] && CITY_POLICY_LIBRARY[cityKey].years[yearKey];
+  const off = OFFICIAL_CITIES && OFFICIAL_CITIES[cityKey] && OFFICIAL_CITIES[cityKey].years[yearKey];
+  if (!rec || !off) return null;
+  const diff = {};
+  const recDiff = {};
+  ['label', 'effective', 'pending'].forEach(f => { if (!valueEqual(rec[f], off[f])) recDiff[f] = off[f]; });
+  if (Object.keys(recDiff).length) diff.__rec = recDiff;
+  Object.keys(rec.items || {}).forEach(ik => {
+    const iu = rec.items[ik], io = off.items && off.items[ik];
+    if (!io) { diff[ik] = { __localOnly: true }; return; }
+    const fd = {};
+    Object.keys(iu).forEach(f => { if (!valueEqual(iu[f], io[f])) fd[f] = io[f]; });
+    if (Object.keys(fd).length) diff[ik] = fd;
+  });
+  return Object.keys(diff).length ? diff : null;
+}
+
+/** 全库本地改动字段数（用于横幅/状态栏提示） */
+function modifiedFieldCount() {
+  let n = 0;
+  Object.keys(CITY_POLICY_LIBRARY).forEach(ck => {
+    const city = CITY_POLICY_LIBRARY[ck];
+    Object.keys(city.years || {}).forEach(yk => {
+      const d = officialDiffFor(ck, yk);
+      if (!d) return;
+      Object.keys(d).forEach(k => { if (k !== '__rec') n += Object.keys(d[k]).length; else n += Object.keys(d.__rec).length; });
+    });
+  });
+  return n;
+}
+
+/** 单字段恢复官方值；成功返回 true */
+function restoreOfficialValue(cityKey, yearKey, itemKey, field) {
+  const rec = CITY_POLICY_LIBRARY[cityKey] && CITY_POLICY_LIBRARY[cityKey].years[yearKey];
+  const off = OFFICIAL_CITIES && OFFICIAL_CITIES[cityKey] && OFFICIAL_CITIES[cityKey].years[yearKey];
+  if (!rec || !off) return false;
+  if (itemKey === '__rec') {
+    if (off[field] === undefined) return false;
+    rec[field] = deepClone(off[field]);
+  } else {
+    const it = rec.items && rec.items[itemKey];
+    const io = off.items && off.items[itemKey];
+    if (!it || !io || io[field] === undefined) return false;
+    it[field] = deepClone(io[field]);
+    if (field !== 'rates') delete it.pending;
+  }
+  _policyCache.clear();
+  savePolicyLibrary();
+  return true;
+}
+
+/** 清除本机存档，整个工作库恢复为当前官方层（官方层之外的本地城市——自定义/新增——全部保留） */
+function restoreOfficialAll() {
+  clearPolicyLibraryStorage();
+  const localOnly = {};
+  Object.keys(CITY_POLICY_LIBRARY).forEach(k => {
+    if (!OFFICIAL_CITIES || !OFFICIAL_CITIES[k]) localOnly[k] = deepClone(CITY_POLICY_LIBRARY[k]);
+  });
+  Object.keys(CITY_POLICY_LIBRARY).forEach(k => delete CITY_POLICY_LIBRARY[k]);
+  Object.assign(CITY_POLICY_LIBRARY, deepClone(OFFICIAL_CITIES || {}), localOnly);
+  if (!CITY_POLICY_LIBRARY.custom) CITY_POLICY_LIBRARY.custom = defaultCustomCity().custom;
+  normalizePolicyLibrary(CITY_POLICY_LIBRARY);
+  window._policyFromStorage = false;
+  window._policySavedAt = '';
+  _policyCache.clear();
+}
 
 /* 数据文件是否缺失（仅剩自定义城市） */
 function isPolicyDataFileMissing() {
@@ -326,5 +574,7 @@ function rowsToLibrary(rows) {
   return { library: lib, errors: errors };
 }
 
-  window.PolicyLib = { CITY_POLICY_LIBRARY,FUND_RATES_STD,POLICY_LIB_STORAGE_KEY,SI_ITEMS,SI_ITEM_LABELS,_policyCache,clampItemBase,clearPolicyLibraryStorage,findCityKey,fundItem,isPolicyDataFileMissing,libraryToRows,loadPolicyLibrary,normalizePolicyLibrary,policyStorageAvailable,resolvePolicy,resolvePolicyMemo,rowsToLibrary,savePolicyLibrary,siItem };
+  window.PolicyLib = { CITY_POLICY_LIBRARY,FUND_RATES_STD,POLICY_LIB_STORAGE_KEY,SI_ITEMS,SI_ITEM_LABELS,_policyCache,applyRemoteOfficial,applySeedUpdateIfNewer,clampItemBase,clearPolicyLibraryStorage,compareVersions,findCityKey,fundItem,getOfficialVersion,initRemotePolicy,isPolicyDataFileMissing,libraryToRows,loadPolicyLibrary,mergeLibrary,modifiedFieldCount,normalizePolicyLibrary,officialDiffFor,policyStorageAvailable,resolvePolicy,resolvePolicyMemo,restoreOfficialAll,restoreOfficialValue,rowsToLibrary,savePolicyLibrary,siItem,valueEqual };
+
+  function getOfficialVersion() { return OFFICIAL_VERSION; }
 })();

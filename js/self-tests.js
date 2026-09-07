@@ -1,7 +1,8 @@
 /* ============================================================
  * self-tests.js — TaxTest 页面自检
- * 职责：三套件自检——计税与政策库（94 项）+ 批量计税流水线 + 导出器组装，
- *       页面加载后自动运行并输出 console；node tests/run.js 跑同一份断言。
+ * 职责：六套件自检——计税与政策库 + 批量计税流水线 + 导出器组装 + 年度汇算 +
+ *       分享链接 + 政策库同步，页面加载后自动运行并输出 console；
+ *       node tests/run.js 跑同一份断言。
  * 对外接口：window.TaxTest.{runSelfTests, runBatchPipelineTests, runExporterTests, runAll}。
  * 依赖：TaxEngine/PolicyLib/SocialIns/Exporter/PageShared/PageMulti/PageBatch/TaxState/TaxUtils。
  * ============================================================ */
@@ -740,16 +741,128 @@ function runShareTests() {
   return { passed: t.length - failed.length, total: t.length, failed };
 }
 
+// ==================== 政策库同步自检 ====================
+// 版本比较、官方层→本机三方合并（未改字段更新/已改字段保留/新增补入/本地独有保留）、
+// 本地改动标记；applyRemoteOfficial / restoreOfficialValue 涉及写本机存档，仅在 Node 门内跑。
+
+function runPolicySyncTests() {
+  const t = [];
+  const eq = (name, actual, expected, eps = 0.0001) => {
+    const ok = Math.abs(actual - expected) <= eps;
+    t.push({ name, ok, actual, expected });
+    return ok;
+  };
+  const isTrue = (name, cond) => eq(name, cond ? 1 : 0, 1);
+  const nodeEnv = typeof localStorage === 'undefined';
+
+  const { compareVersions, mergeLibrary, officialDiffFor } = PolicyLib;
+  const rec = (personal, lower, upper, employer) => {
+    const pension = { personal: personal, lower: lower, upper: upper };
+    if (employer != null) pension.employer = employer;
+    return { label: 'L', effective: ['2025-07', '2026-06'], pending: true, items: { pension: pension } };
+  };
+  const city = name => ({ name: name, years: { '2025': rec(0.08, 1000, 20000, 0.16) } });
+
+  // —— 版本比较 ——
+  isTrue('版本·相等为 0', compareVersions('2026.09', '2026.09') === 0);
+  isTrue('版本·低对高为 -1', compareVersions('2026.09', '2026.10') === -1);
+  isTrue('版本·高对低为 1', compareVersions('2026.10', '2026.09') === 1);
+  isTrue('版本·跨年进位', compareVersions('2027.01', '2026.12') === 1);
+
+  // —— 三方合并：核心规则 ——
+  const base = { beijing: city('北京') };
+  const user = JSON.parse(JSON.stringify(base));
+  user.beijing.years['2025'].items.pension.lower = 1500;      // 用户改了下限
+  const remote = JSON.parse(JSON.stringify(base));
+  remote.beijing.years['2025'].items.pension.personal = 0.09; // 官方改了个人比例
+  remote.beijing.years['2025'].items.pension.lower = 1200;    // 官方也调了用户改过的字段
+  remote.beijing.years['2025'].items.pension.upper = 21000;   // 官方调了用户没动的字段
+  const m = mergeLibrary(base, user, remote);
+  isTrue('合并·用户未改字段采纳官方新值', m.beijing.years['2025'].items.pension.personal === 0.09);
+  isTrue('合并·用户已改字段保留用户值', m.beijing.years['2025'].items.pension.lower === 1500);
+  isTrue('合并·未动字段同步官方调整', m.beijing.years['2025'].items.pension.upper === 21000);
+
+  // —— 新增 / 本地独有 ——
+  const remote2 = JSON.parse(JSON.stringify(remote));
+  remote2.shanghai = city('上海');                                           // 官方新增城市
+  remote2.beijing.years['2026'] = rec(0.08, 1100, 22000, 0.16);             // 官方新增年度
+  remote2.beijing.years['2025'].items.injury = { personal: 0, lower: null, upper: null, employer: 0.002 }; // 官方新增险种
+  const user2 = JSON.parse(JSON.stringify(user));
+  user2.c123abc = { name: '我的城市', years: { custom: rec(0.1, null, null, 0.1) } }; // 用户新增城市
+  const m2 = mergeLibrary(base, user2, remote2);
+  isTrue('合并·官方新增城市补入', !!m2.shanghai && m2.shanghai.name === '上海');
+  isTrue('合并·官方新增年度补入', !!m2.beijing.years['2026']);
+  isTrue('合并·官方新增险种补入', !!m2.beijing.years['2025'].items.injury && m2.beijing.years['2025'].items.injury.employer === 0.002);
+  isTrue('合并·用户新增城市保留', !!m2.c123abc && m2.c123abc.name === '我的城市');
+  isTrue('合并·官方排序在前、本地独有殿后', Object.keys(m2).slice(-1)[0] === 'c123abc');
+
+  // —— 官方下线：保留本地副本不删数据 ——
+  const userSh = { beijing: user.beijing, shanghai: { name: '上海', years: { '2025': rec(0.08, 1000, 20000, 0.16) } } };
+  const m4 = mergeLibrary({ beijing: base.beijing, shanghai: userSh.shanghai }, userSh, { beijing: remote.beijing });
+  isTrue('合并·官方移除的城市保留本地副本', !!m4.shanghai && m4.shanghai.name === '上海');
+
+  // —— 年度说明三方 ——
+  const remoteL = JSON.parse(JSON.stringify(base));
+  remoteL.beijing.years['2025'].label = '官方新说明';
+  const userL = JSON.parse(JSON.stringify(user));
+  userL.beijing.years['2025'].label = '用户备注';
+  isTrue('合并·用户改过说明保留', mergeLibrary(base, userL, remoteL).beijing.years['2025'].label === '用户备注');
+  isTrue('合并·用户没改说明采纳官方', mergeLibrary(base, JSON.parse(JSON.stringify(base)), remoteL).beijing.years['2025'].label === '官方新说明');
+
+  // —— 本地改动标记（真实库：内存改后即还原，不写存档） ——
+  const bj = CITY_POLICY_LIBRARY.beijing;
+  const yk0 = Object.keys(bj.years)[0];
+  const snap = JSON.parse(JSON.stringify(bj));
+  isTrue('标记·未改动城市无 diff', officialDiffFor('beijing', yk0) === null);
+  bj.years[yk0].items.pension.lower = 1;
+  const d = officialDiffFor('beijing', yk0);
+  isTrue('标记·改动字段标出官方值', !!d && !!d.pension && d.pension.lower === snap.years[yk0].items.pension.lower);
+  bj.years[yk0].items.pension.lower = snap.years[yk0].items.pension.lower; // 还原
+  isTrue('标记·还原后 diff 消失', officialDiffFor('beijing', yk0) === null);
+
+  // —— 远端应用全链路（写本机存档，仅 Node 门内执行） ——
+  if (nodeEnv) {
+    const libSnap = JSON.parse(JSON.stringify(CITY_POLICY_LIBRARY));
+    const c = JSON.parse(JSON.stringify(libSnap.beijing));
+    c.years[yk0].items.pension.personal = 0.99;  // 官方新比例（yk0 年度）
+    const info = PolicyLib.applyRemoteOfficial({ version: '2026.10', cities: { beijing: c } });
+    isTrue('远端·返回版本推进信息', !!info && info.from === '2026.09' && info.to === '2026.10');
+    isTrue('远端·官方新值生效', PolicyLib.resolvePolicy('beijing', '2025-08').items.pension.personal === 0.99);
+    isTrue('远端·其余城市保留', !!CITY_POLICY_LIBRARY.guangzhou);
+    isTrue('远端·用户原有数值不丢', PolicyLib.resolvePolicy('beijing', '2025-08').items.pension.lower === libSnap.beijing.years[yk0].items.pension.lower);
+    CITY_POLICY_LIBRARY.beijing.years[yk0].items.pension.personal = 0.5;  // 模拟用户随后改动该字段
+    isTrue('远端·单字段恢复官方值',
+      PolicyLib.restoreOfficialValue('beijing', yk0, 'pension', 'personal') === true
+      && PolicyLib.resolvePolicy('beijing', '2025-08').items.pension.personal === 0.99);
+    isTrue('远端·非更高版本不生效', PolicyLib.applyRemoteOfficial({ version: '2026.09', cities: libSnap }) === null);
+    // 还原整个工作库（Node 无 localStorage，clear/写档均静默跳过）
+    Object.keys(CITY_POLICY_LIBRARY).forEach(k => delete CITY_POLICY_LIBRARY[k]);
+    Object.assign(CITY_POLICY_LIBRARY, libSnap);
+  }
+
+  const failed = t.filter(x => !x.ok);
+  const summary = `${t.length - failed.length}/${t.length} 通过`;
+  if (failed.length) {
+    console.group('🧪 政策库同步自检：' + summary);
+    failed.forEach(f => console.error(`✗ ${f.name}：期望 ${f.expected}，实际 ${f.actual}`));
+    console.groupEnd();
+  } else {
+    console.log('🧪 政策库同步自检： ' + summary);
+  }
+  return { passed: t.length - failed.length, total: t.length, failed };
+}
+
 // ==================== 聚合入口 ====================
 
-/** 三套件聚合：浏览器自动执行与 node tests/run.js 共用同一入口 */
+/** 全部套件聚合：浏览器自动执行与 node tests/run.js 共用同一入口 */
 function runAll() {
   const suites = [
     { name: '计税与政策库', result: runSelfTests() },
     { name: '批量计税流水线', result: runBatchPipelineTests() },
     { name: '导出器组装', result: runExporterTests() },
     { name: '年度汇算', result: runAnnualTests() },
-    { name: '分享链接', result: runShareTests() }
+    { name: '分享链接', result: runShareTests() },
+    { name: '政策库同步', result: runPolicySyncTests() }
   ];
   const failed = [];
   suites.forEach(s => s.result.failed.forEach(f => failed.push(Object.assign({ suite: s.name }, f))));
@@ -761,5 +874,5 @@ function runAll() {
   };
 }
 
-  window.TaxTest = { runSelfTests, runBatchPipelineTests, runExporterTests, runAll };
+  window.TaxTest = { runSelfTests, runBatchPipelineTests, runExporterTests, runPolicySyncTests, runAll };
 })();

@@ -1,21 +1,6 @@
-/* ============================================================
- * tax-policy-data.js — 城市社保公积金政策库 · 出厂种子（自动生成，勿直接编辑）
- * ------------------------------------------------------------
- * 本文件由 tax-policy-data.json 生成（node tools/build-policy-seed.js）。
- * 修改政策数据请编辑 JSON 后重新生成；网上访问（GitHub Pages 等）以
- * JSON 为准自动更新，本 JS 仅供 file:// 双击离线打开时兜底加载。
- *
- * 结构：version 版本号（YYYY.MM）+ 城市 → 年度（生效月区间）→
- *   险种（养老/医疗(含生育)/失业/工伤/公积金）：personal 个人比例、
- *   employer 单位比例、lower/upper 基数上下限（null 不限）、
- *   公积金额外 rates 可选比例档。pending: true 表示数值待核对。
- *
- * 数据说明与更新流程见 README「政策数据维护」；所有数值均为参考值，
- * 请以当地社保部门公布为准。版本：2026.09
- * ============================================================ */
-
-window.CITY_POLICY_LIBRARY_VERSION = '2026.09';
-window.CITY_POLICY_LIBRARY_DATA = {
+{
+  "version": "2026.09",
+  "cities": {
     "beijing": {
       "name": "北京",
       "years": {
@@ -1329,4 +1314,5 @@ window.CITY_POLICY_LIBRARY_DATA = {
         }
       }
     }
-  };
+  }
+}

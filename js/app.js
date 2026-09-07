@@ -140,8 +140,24 @@
     });
   }
 
+  /* ---------- 政策库远端更新 ---------- */
+  function onPolicyRemoteApplied(e) {
+    window._policyRemoteInfo = e.detail;
+    PagePolicy.onPmCityChange();   // 政策库页重渲染（存储状态 + 本地改动标记）
+    const spCitySel = document.getElementById('sp-city');
+    if (spCitySel) spCitySel.innerHTML = PageParams.buildCityOptions(salaryParams.cityId);
+    PageParams.onCityParamChange();  // 工资参数卡政策明细与批量兜底盒刷新
+    console.info(`政策库已自动更新：${e.detail.from} → ${e.detail.to}（${e.detail.modified ? '保留 ' + e.detail.modified + ' 处本地修改' : '无本地冲突'}）`);
+  }
+
   /* ---------- 初始化 ---------- */
   function init() {
+    // 官方政策数据更新先于任何 UI 构建启动期检查（file:// 换新种子的同步合并），
+    // 远端 JSON 拉取为异步，完成后经 policy:remote-applied 事件刷新相关视图
+    PolicyLib.applySeedUpdateIfNewer();
+    window.addEventListener('policy:remote-applied', onPolicyRemoteApplied);
+    PolicyLib.initRemotePolicy();
+
     initTheme();
     initSidebar();
     initRouting();

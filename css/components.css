@@ -193,6 +193,25 @@ input.input-error {
   text-align: right;
 }
 
+/* 政策库编辑器：本地改动字段的「恢复官方值」角标 */
+.pm-restore-btn {
+  display: inline-block;
+  padding: 0 5px;
+  margin-left: 3px;
+  border: 1px solid var(--t-border);
+  border-radius: 4px;
+  background: var(--t-bg-container);
+  color: var(--t-text-2);
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.pm-restore-btn:hover {
+  color: var(--t-primary);
+  border-color: var(--t-primary);
+}
+
 /* ---------- 表格 ---------- */
 .result-card {
   background: var(--t-bg-container);

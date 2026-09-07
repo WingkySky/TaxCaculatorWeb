@@ -236,7 +236,7 @@
           </div>
           <div id="pm-storage-status" class="info-box compact"></div>
           <div class="info-box compact">
-            数据分三层：<strong>tax-policy-data.js</strong>（出厂种子，跨机拷贝即用）→ 本机浏览器自动存档（修改后即时保存，刷新自动加载）→ Excel / JSON 导出（人工备份与跨机同步）。数值为参考值，请以当地社保部门公布为准。
+            数据分两层：<strong>官方数据层</strong>（线上访问自动更新，file:// 打开时由 tax-policy-data.js 兜底）→ <strong>本机存档</strong>（修改后即时保存，刷新自动加载；官方更新时你改过的字段保留并标 ⟲，可一键恢复官方值）。另有 Excel / JSON 导出备份。数值为参考值，请以当地社保部门公布为准。
           </div>
           <div class="row-flex" style="margin-bottom:14px;">
             <div class="sp-field" style="width:180px;"><label>城市</label><select id="pm-city" onchange="PagePolicy.onPmCityChange()"></select></div>
@@ -244,7 +244,7 @@
             <button class="btn btn-secondary btn-sm" onclick="PagePolicy.pmAddCity()">新增城市</button>
             <button class="btn btn-secondary btn-sm" onclick="PagePolicy.pmAddYear()">新增年度</button>
             <button class="btn btn-secondary btn-sm" onclick="PagePolicy.pmDeleteYear()">删除当前年度</button>
-            <button class="btn btn-secondary btn-sm" onclick="PagePolicy.pmResetToSeed()">恢复数据文件默认</button>
+            <button class="btn btn-secondary btn-sm" onclick="PagePolicy.pmResetToSeed()">恢复官方默认数据</button>
           </div>
           <div class="row-flex" style="margin-bottom:14px;">
             <div class="sp-field" style="width:170px;"><label>生效起（YYYY-MM）</label><input class="pm-item-input" style="text-align:left;" id="pm-eff-start" onchange="PagePolicy.onPmEffectiveChange()"></div>

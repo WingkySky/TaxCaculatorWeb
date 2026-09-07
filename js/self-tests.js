@@ -18,6 +18,7 @@
     runBatchLaborPass, runBatchSalaryPass, runBatchSalaryPerson } = PageBatch;
   const { buildBatchReportData, buildMultiReportData, maskBankCard, maskIdCard, maskPhone } = PageReport;
   const { estimateLaborWithholding, estimateSalaryWithholding, incomeOf, settle, EXTRA_ANNUAL_DEFAULTS } = TaxAnnual;
+  const { decodeShare, encodeShare } = PageShare;
 
 // ==================== Self tests ====================
 // 控制台自检：城市政策库、逐险种 clamp、年度匹配、工资累计预扣、反算、劳务回归。
@@ -670,6 +671,75 @@ function runAnnualTests() {
   return { passed: t.length - failed.length, total: t.length, failed };
 }
 
+// ==================== 分享链接自检 ====================
+// 编解码 roundtrip（多月工资含分项与年终奖、多月劳务、汇算含预扣手填）、
+// 损坏/版本不符防呆、12 月金额顺序保持。
+
+function runShareTests() {
+  const t = [];
+  const eq = (name, actual, expected, eps = 0.0001) => {
+    const ok = Math.abs(actual - expected) <= eps;
+    t.push({ name, ok, actual, expected });
+    return ok;
+  };
+  const isTrue = (name, cond) => eq(name, cond ? 1 : 0, 1);
+
+  const multiSalary = {
+    v: 1, t: 'multi', it: 'salary', y: 2026, dir: 'forward', gap: 0,
+    m: [10000, 12000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9000],
+    bp: { c: 'beijing', b: 10000, fb: '', fr: 0.05, ed: 1000,
+      xd: { on: true, childEducation: { on: true, count: 1 }, houseRent: { on: true, tier: 1500 }, support: { on: true, mode: 'solo' } } },
+    bn: { a: 36000, m: 12 }
+  };
+  const back1 = decodeShare(encodeShare(multiSalary));
+  isTrue('分享·多月工资 roundtrip', (() => {
+    return back1.t === 'multi' && back1.it === 'salary' && back1.y === 2026
+      && back1.m[0] === 10000 && back1.m[1] === 12000 && back1.m[11] === 9000
+      && back1.bp.c === 'beijing' && back1.bp.fr === 0.05
+      && back1.bp.xd.childEducation.count === 1 && back1.bp.xd.houseRent.tier === 1500
+      && back1.bn.a === 36000 && back1.bn.m === 12;
+  })());
+  isTrue('分享·12 月顺序保持', back1.m.join(',') === '10000,12000,0,0,0,0,0,0,0,0,0,9000');
+
+  const multiLabor = {
+    v: 1, t: 'multi', it: 'labor', y: 2026, dir: 'reverse', gap: 1,
+    m: [8000, 8000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  };
+  const back2 = decodeShare(encodeShare(multiLabor));
+  isTrue('分享·多月劳务 roundtrip（方向/断月）',
+    back2.it === 'labor' && back2.dir === 'reverse' && back2.gap === 1 && back2.bp === undefined && back2.bn === undefined);
+
+  const annual = {
+    v: 1, t: 'annual', y: 2026,
+    sal: [10000, 10000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], lab: [0, 0, 0, 0, 0, 30000, 0, 0, 0, 0, 0, 0],
+    au: 5000, ro: 0, sia: 27000,
+    ex: [24000, 0, 4800, 12000, 0, 36000, 0],
+    w: { salary: 630 }
+  };
+  const back3 = decodeShare(encodeShare(annual));
+  isTrue('分享·汇算 roundtrip', (() => {
+    return back3.t === 'annual' && back3.sal[0] === 10000 && back3.lab[5] === 30000
+      && back3.au === 5000 && back3.sia === 27000
+      && back3.ex[0] === 24000 && back3.ex[3] === 12000
+      && back3.w.salary === 630 && back3.w.labor === undefined;
+  })());
+
+  isTrue('分享·损坏 payload 防呆', decodeShare('not-a-valid-payload!!!') === null && decodeShare('') === null);
+  isTrue('分享·版本不符防呆', decodeShare(encodeShare(Object.assign({}, multiLabor, { v: 99 }))) === null);
+  isTrue('分享·类型未知防呆', decodeShare(encodeShare(Object.assign({}, multiLabor, { t: 'batch' }))) === null);
+
+  const failed = t.filter(x => !x.ok);
+  const summary = `${t.length - failed.length}/${t.length} 通过`;
+  if (failed.length) {
+    console.group('🧪 分享链接自检：' + summary);
+    failed.forEach(f => console.error(`✗ ${f.name}：期望 ${f.expected}，实际 ${f.actual}`));
+    console.groupEnd();
+  } else {
+    console.log('🧪 分享链接自检： ' + summary);
+  }
+  return { passed: t.length - failed.length, total: t.length, failed };
+}
+
 // ==================== 聚合入口 ====================
 
 /** 三套件聚合：浏览器自动执行与 node tests/run.js 共用同一入口 */
@@ -678,7 +748,8 @@ function runAll() {
     { name: '计税与政策库', result: runSelfTests() },
     { name: '批量计税流水线', result: runBatchPipelineTests() },
     { name: '导出器组装', result: runExporterTests() },
-    { name: '年度汇算', result: runAnnualTests() }
+    { name: '年度汇算', result: runAnnualTests() },
+    { name: '分享链接', result: runShareTests() }
   ];
   const failed = [];
   suites.forEach(s => s.result.failed.forEach(f => failed.push(Object.assign({ suite: s.name }, f))));

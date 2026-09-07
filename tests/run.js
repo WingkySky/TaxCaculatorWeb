@@ -40,7 +40,7 @@ globalThis.location = { hash: '', href: '' };
   'js/annual-engine.js',
   'js/page-multi.js',
   'js/batch-parse.js', 'js/batch-calc.js', 'js/batch-source.js', 'js/batch-view.js', 'js/batch-export.js',
-  'js/page-batch.js', 'js/page-params.js', 'js/page-rules.js', 'js/page-annual.js',
+  'js/page-batch.js', 'js/page-params.js', 'js/page-rules.js', 'js/page-annual.js', 'js/page-share.js',
   'js/print-report.js', 'js/self-tests.js'
 ].forEach(f => require(path.join(ROOT, f)));
 

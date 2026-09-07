@@ -65,3 +65,12 @@
 | `tests/run.js` | 加载清单 +1 |
 | `js/self-tests.js` | 分享 roundtrip 断言 +6 |
 | `README.md` | 功能特点与架构描述同步 |
+
+## 实施记录（2026-09-07）
+
+已实施并验收通过：
+
+- 回归门 **161/161**（新增分享链接套件 7 条：多月工资/劳务与汇算三类 roundtrip、损坏 payload/版本不符/类型未知防呆、12 月顺序保持），Git Bash 与 PowerShell 双 shell 全绿；file:// 五套件全绿、零 JS 错误。
+- 浏览器冒烟全过：多月分享（生成 payload 含参数 → resetMulti 模拟新收件人 → 打开链接自动还原 12 月并计算 12 行结果 → 横幅显示 → 清除后输入清空回多月页）；汇算分享（打开即还原工资/劳务/房贷并自动计算，标准算例 payload 直接复现应补 780）；损坏链接防呆提示并回落多月页。
+- 实现说明：自动计算直接调用已导出的 `PageMulti.calcMulti` / `PageAnnual.calc`（无需 DOM 触发）；`share` 路由在 `renderRoute` 特判转发给 `PageShare.applyShare`，由其还原数据后导航到目标页；`currentRoute` 增加对 hash 中 `?query` 的剥离。
+- 冒烟方法沿用 no-store 服务器（IAB 缓存教训，见记忆 taxcalc-browser-verification）。

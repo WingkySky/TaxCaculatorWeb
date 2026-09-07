@@ -193,7 +193,8 @@ function calc() {
 
   document.getElementById('ann-result').innerHTML = `
     <div class="card" style="border-color:var(--t-primary);">
-      <div class="card-title"><span>汇算结果（${year} 年度）</span></div>
+      <div class="card-title"><span>汇算结果（${year} 年度）</span>
+        <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px;" onclick="PageShare.shareAnnual()"> 分享链接</button></div>
       <div class="summary-grid">
         <div class="summary-item"><div class="label">应纳税额</div><div class="value blue">¥${formatNum(r.annualTax)}</div></div>
         <div class="summary-item"><div class="label">已预扣税额</div><div class="value">¥${formatNum(r.withheldTotal)}</div></div>

@@ -9,10 +9,10 @@
 'use strict';
 
   /* ---------- 路由 ---------- */
-  const ROUTES = ['multi', 'batch', 'annual', 'policy', 'rules'];
+  const ROUTES = ['multi', 'batch', 'annual', 'policy', 'rules', 'share'];
 
   function currentRoute() {
-    const h = (location.hash || '').replace(/^#\/?/, '');
+    const h = (location.hash || '').replace(/^#\/?/, '').split('?')[0];
     return ROUTES.includes(h) ? h : 'multi';
   }
 
@@ -24,6 +24,7 @@
 
   function renderRoute() {
     const route = currentRoute();
+    if (route === 'share') { PageShare.applyShare(); return; }   // 分享路由：还原数据后由 applyShare 导航到目标页
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const page = document.getElementById('page-' + route);
     if (page) page.classList.add('active');

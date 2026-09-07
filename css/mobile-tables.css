@@ -1,0 +1,194 @@
+/* ============================================================
+   mobile-tables.css — ≤768px 移动端表格体验
+   机制：断点 768px（与 layout.css 抽屉断点一致）纯 CSS 切换，实时跟随窗口宽度；
+   变形表走双 DOM（.only-desktop / .only-mobile 二选一显示，渲染函数同时输出两份）；
+   宽表走 .scroll-x 滑动增强（ui.js enhanceScrollX 加 .is-scrollable / .at-end）。
+   桌面端（>768px）零改动；打印永远输出桌面形态（print.css 归口规则）。
+   设计规格：docs/superpowers/specs/2026-09-07-mobile-table-experience-design.md
+   ============================================================ */
+
+/* ---------- 双 DOM 显隐（默认桌面，断点内反转） ---------- */
+.only-mobile { display: none; }
+
+@media (max-width: 768px) {
+  .only-desktop { display: none; }
+  .only-mobile { display: block; }
+}
+
+/* ---------- 宽表滑动增强（吸附首列 + 右缘淡出；全局生效，不溢出时零影响） ---------- */
+.scroll-x.is-scrollable th:first-child,
+.scroll-x.is-scrollable td:first-child:not(.span-row) {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--t-bg-container);
+  box-shadow: var(--t-shadow-divider);
+}
+.scroll-x.is-scrollable th:first-child { background: var(--t-bg-header); }
+/* 行悬浮/合计行背景需同步实底，避免吸附列透出下层内容 */
+.scroll-x.is-scrollable tbody tr:hover td:first-child { background: var(--t-bg-hover); }
+.scroll-x.is-scrollable tr.total-row td:first-child { background: var(--t-bg-header); }
+.scroll-x.is-scrollable:not(.at-end) {
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent 100%);
+}
+
+@media (max-width: 768px) {
+
+  /* ---------- 逐月明细紧凑表（方案 C：分层展开，5 列零横向滑动） ---------- */
+  .m-compact { width: 100%; border-collapse: collapse; }
+  .m-compact th {
+    padding: 8px 6px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--t-text-2);
+    font-weight: 500;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--t-split);
+    background: var(--t-bg-header);
+  }
+  .m-compact th:first-child { text-align: left; }
+  .m-compact td {
+    padding: 10px 6px;
+    text-align: right;
+    border-bottom: 1px solid var(--t-split);
+    font-size: 13px;
+    color: var(--t-text);
+  }
+  .m-compact td:first-child { text-align: left; color: var(--t-text-2); white-space: nowrap; }
+  .m-compact td.highlight { font-weight: 700; color: var(--t-success); }
+  .m-compact td.tax-col { color: var(--t-error); font-weight: 600; }
+  .m-compact tr.bonus-row td { background: rgba(22, 119, 255, 0.06); }
+  .m-compact tr.subtotal-row td { background: var(--t-bg-header); font-weight: 600; }
+  .m-compact tr.total-row td {
+    background: var(--t-bg-header);
+    border-top: 2px solid var(--t-primary);
+    font-weight: 700;
+  }
+
+  /* 月份列内的展开/收起按钮 */
+  .m-expand-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-left: 5px;
+    border: 1px solid var(--t-border);
+    border-radius: 50%;
+    background: var(--t-bg-input);
+    color: var(--t-text-3);
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+    vertical-align: middle;
+    padding: 0;
+    transition: transform 0.2s, color 0.2s, border-color 0.2s;
+  }
+  .m-expand-btn.open { transform: rotate(180deg); color: var(--t-primary); border-color: var(--t-primary); }
+
+  /* 展开行：其余列转 label:value 网格（展开态仅 DOM class，不进 TaxState） */
+  .m-detail-row { display: none; }
+  .m-detail-row.open { display: table-row; }
+  .m-detail-row td {
+    text-align: left;
+    background: var(--t-bg-layout);
+    border-bottom: 1px solid var(--t-split);
+  }
+  html.theme-dark .m-detail-row td { background: rgba(255, 255, 255, 0.04); }
+  .m-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 14px;
+    padding: 6px 8px 10px;
+  }
+  .m-detail-grid .mi {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    border-bottom: 1px dashed var(--t-split);
+    padding: 6px 0;
+    min-width: 0;
+  }
+  .m-detail-grid .mi.wide { grid-column: 1 / -1; }
+  .m-detail-grid .mi .k { font-size: 11px; color: var(--t-text-3); white-space: nowrap; flex-shrink: 0; }
+  .m-detail-grid .mi .v {
+    font-size: 12px;
+    color: var(--t-text);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    word-break: break-all;
+    min-width: 0;
+  }
+  .m-detail-grid .note-name { font-size: 12px; }
+  .m-detail-grid .note-policy { max-width: none; }
+
+  /* ---------- 年终奖方案对比卡（方案 B：行转卡片） ---------- */
+  .m-bonus-card {
+    border: 1px solid var(--t-split);
+    border-radius: var(--t-radius);
+    background: var(--t-bg-container);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .m-bonus-card.active { border-color: var(--t-success); background: var(--t-success-bg); }
+  .m-bonus-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .m-bonus-head .cur {
+    background: var(--t-success);
+    color: var(--t-text-inverse);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 12px;
+  }
+  .m-bonus-body { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .m-bonus-item { display: flex; flex-direction: column; gap: 2px; }
+  .m-bonus-item .k { font-size: 11px; color: var(--t-text-2); }
+  .m-bonus-item .v { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .m-bonus-item .v.tax { color: var(--t-error); }
+  .m-bonus-note {
+    font-size: 11px;
+    color: var(--t-text-2);
+    line-height: 1.6;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--t-split);
+  }
+
+  /* ---------- 政策编辑险种字段卡（输入竖排，14px 可读可点） ---------- */
+  .pm-card {
+    border: 1px solid var(--t-split);
+    border-radius: var(--t-radius);
+    background: var(--t-bg-container);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .pm-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 14px;
+    font-weight: 600;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--t-split);
+  }
+  .pm-card-head .pending { color: var(--t-warning); font-size: 11px; font-weight: 400; }
+  .pm-card-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+  .pm-card-fields .f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .pm-card-fields .f.wide { grid-column: 1 / -1; }
+  .pm-card-fields label { font-size: 12px; color: var(--t-text-2); }
+  .pm-card-fields .pm-item-input {
+    font-size: 14px;
+    text-align: left;
+    padding: 7px 10px;
+  }
+}

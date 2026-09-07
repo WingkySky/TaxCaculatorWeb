@@ -13,6 +13,10 @@
   /* 解除应用布局的视口高度/溢出约束，避免报告被裁剪 */
   html, body { height: auto !important; overflow: visible !important; }
 
+  /* 打印永远输出桌面表格：隐藏移动形态、恢复桌面形态（mobile-tables.css 归口） */
+  .only-mobile { display: none !important; }
+  .only-desktop { display: block !important; }
+
   body > *:not(#print-report) { display: none !important; }
   #print-report {
     display: block !important;

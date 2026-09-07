@@ -341,23 +341,39 @@ function renderMultiResults(results, plan) {
     } else {
       const recBadge = `<span style="background:var(--t-success);color:#fff;font-size:11px;padding:2px 10px;border-radius:12px;font-weight:700;"> 推荐：${recLabel[plan.recommendation]}${plan.saving > 0 ? ` · 节税 ¥${formatNum(plan.saving)}` : ''}</span>`;
       const btn = (s, label) => `<button class="btn ${plan.chosen === s ? 'btn-green' : 'btn-secondary'}" style="padding:4px 12px;font-size:12px;" onclick="PageMulti.setMultiBonusStrategy('${s}')">${label}</button>`;
+      /* 移动形态：行转卡片（方案B）——卡头=方案名，正文=两关键数，说明整段下沉为注脚 */
+      const mBonusCard = (s, label, taxHtml, totalTax, note) => `
+            <div class="m-bonus-card${plan.chosen === s ? ' active' : ''}">
+              <div class="m-bonus-head"><span>${label}</span>${plan.chosen === s ? '<span class="cur">当前</span>' : ''}</div>
+              <div class="m-bonus-body">
+                <div class="m-bonus-item"><span class="k">年终奖应纳个税</span><span class="v tax">¥${taxHtml}</span></div>
+                <div class="m-bonus-item"><span class="k">全年个税合计</span><span class="v">¥${formatNum(totalTax)}</span></div>
+              </div>
+              <div class="m-bonus-note">${note}</div>
+            </div>`;
       bonusCard = `
       <div class="result-card" style="margin-bottom:16px;">
         <div class="result-header"><span> 年终奖方案对比（${plan.bonusMonth} · 奖金 ¥${formatNum(plan.bonus)}）</span><span>${recBadge}</span></div>
-        <div style="overflow-x:auto;">
-          <table class="result-table" style="font-size:13px;">
-            <thead><tr><th>方案</th><th>年终奖应纳个税</th><th>全年个税合计</th><th>说明</th></tr></thead>
-            <tbody>
-              <tr style="${plan.chosen === 'separate' ? 'background:var(--t-success-bg);' : ''}">
-                <td>单独计税</td><td class="tax-col">¥${formatNum(plan.separateTax)}</td><td>¥${formatNum(plan.separateTotalTax)}</td>
-                <td style="color:var(--t-text-2);">奖金 ÷12 定档，不并入累计，不享受减除费用；每年限一次</td>
-              </tr>
-              <tr style="${plan.chosen === 'combined' ? 'background:var(--t-success-bg);' : ''}">
-                <td>并入综合所得</td><td class="tax-col">¥${formatNum(plan.combinedBonusTax)}（税负增量）</td><td>¥${formatNum(plan.combinedTotalTax)}</td>
-                <td style="color:var(--t-text-2);">奖金计入发放月累计收入，正常享受减除</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="only-desktop">
+          <div style="overflow-x:auto;">
+            <table class="result-table" style="font-size:13px;">
+              <thead><tr><th>方案</th><th>年终奖应纳个税</th><th>全年个税合计</th><th>说明</th></tr></thead>
+              <tbody>
+                <tr style="${plan.chosen === 'separate' ? 'background:var(--t-success-bg);' : ''}">
+                  <td>单独计税</td><td class="tax-col">¥${formatNum(plan.separateTax)}</td><td>¥${formatNum(plan.separateTotalTax)}</td>
+                  <td style="color:var(--t-text-2);">奖金 ÷12 定档，不并入累计，不享受减除费用；每年限一次</td>
+                </tr>
+                <tr style="${plan.chosen === 'combined' ? 'background:var(--t-success-bg);' : ''}">
+                  <td>并入综合所得</td><td class="tax-col">¥${formatNum(plan.combinedBonusTax)}（税负增量）</td><td>¥${formatNum(plan.combinedTotalTax)}</td>
+                  <td style="color:var(--t-text-2);">奖金计入发放月累计收入，正常享受减除</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="only-mobile" style="padding:12px 12px 2px;">
+          ${mBonusCard('separate', '单独计税', formatNum(plan.separateTax), plan.separateTotalTax, '奖金 ÷12 定档，不并入累计，不享受减除费用；每年限一次')}
+          ${mBonusCard('combined', '并入综合所得', formatNum(plan.combinedBonusTax) + '（税负增量）', plan.combinedTotalTax, '奖金计入发放月累计收入，正常享受减除')}
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 4px 2px;font-size:12px;color:var(--t-text-2);">
           <span>应用方案：</span>${btn('auto', '跟随推荐')}${btn('separate', '单独计税')}${btn('combined', '并入综合所得')}
@@ -377,13 +393,16 @@ function renderMultiResults(results, plan) {
   const years = Object.keys(yearGroups).sort();
 
   // 逐行明细（按年分组 + 断月/跨年标记 + 年度小计 + 政策标记）
+  // 桌面宽表与移动紧凑表（方案C 分层展开）共用一次遍历，双 DOM 输出
   let tbodyHTML = '';
+  let mobileTbodyHTML = '';
   let seq = 0;
   years.forEach((yr, yi) => {
     const yRows = yearGroups[yr];
     // 跨年分隔
     if (yi > 0) {
       tbodyHTML += yearResetRowHTML(colCount, yr);
+      mobileTbodyHTML += yearResetRowHTML(5, yr);
     }
     // 年度小计变量
     let yPre = 0, yTax = 0, yPost = 0;
@@ -392,10 +411,12 @@ function renderMultiResults(results, plan) {
       // 断月标记
       if (r._isGap) {
         tbodyHTML += gapResetRowHTML(colCount, r.month);
+        mobileTbodyHTML += gapResetRowHTML(5, r.month);
       }
       // 旧政策标记
       if (r._isOldPolicy) {
         tbodyHTML += oldPolicyRowHTML(colCount, r.month);
+        mobileTbodyHTML += oldPolicyRowHTML(5, r.month);
       }
       const isBonusRow = !!r._isBonus;
       const bonusSep = isSalary && isBonusRow && r._bonusSeparate;
@@ -419,6 +440,33 @@ function renderMultiResults(results, plan) {
           <td class="highlight">¥${formatNum(multiDirection === 'forward' ? r.postTax : r.preTax)}</td>
           <td>${isSalary ? (isBonusRow ? '年终奖' : '累计预扣') : (r._isOldPolicy ? '旧政策' : '新政策')}</td>
         </tr>`;
+      /* 移动紧凑行（5 列）+ 展开明细网格；列集按 isSalary 分支，与桌面表头同源 */
+      const mIn = `¥${formatNum(multiDirection === 'forward' ? r.preTax : r.postTax)}`;
+      const mOut = `¥${formatNum(multiDirection === 'forward' ? r.postTax : r.preTax)}`;
+      const mi = (k, vHtml, wide) => `<div class="mi${wide ? ' wide' : ''}"><span class="k">${k}</span><span class="v">${vHtml}</span></div>`;
+      const mDetail = [
+        mi('备注', buildNoteCellHTML(r, isSalary), true),
+        isSalary
+          ? mi('三险一金(个人)', `¥${formatNum(r.socialInsurance)}`)
+          : mi('本次预扣收入额', `¥${formatNum(r.withholdingIncome)}`),
+        ...(isSalary ? [
+          mi('单位社保公积金', `¥${formatNum(siEmployerTotal(r._siDetail))}`),
+          mi('专项附加', `¥${formatNum(r.extraDeduction)}`),
+        ] : []),
+        mi('累计发放金额', cumCell(r.cumIncome)),
+        mi('累计减除费用', cumCell(r.cumDeduction)),
+        mi('累计应纳税所得额', cumCell(r.taxableIncome)),
+        mi('政策类型', isSalary ? (isBonusRow ? '年终奖' : '累计预扣') : (r._isOldPolicy ? '旧政策' : '新政策')),
+      ].join('');
+      mobileTbodyHTML += `
+        <tr${isBonusRow ? ' class="bonus-row"' : ''}>
+          <td>${r.month}<button type="button" class="m-expand-btn" aria-label="展开或收起该月明细" onclick="UI.toggleMobileDetailRow(this)">▾</button></td>
+          <td>${mIn}</td>
+          <td>${formatRate(r.rate)}</td>
+          <td class="tax-col">¥${formatNum(r.currentTax)}</td>
+          <td class="highlight">${mOut}</td>
+        </tr>
+        <tr class="m-detail-row"><td colspan="5"><div class="m-detail-grid">${mDetail}</div></td></tr>`;
       yPre += r.preTax; yTax += r.currentTax; yPost += r.postTax;
     });
     // 年度小计
@@ -431,6 +479,13 @@ function renderMultiResults(results, plan) {
         <td class="tax-col">¥${formatNum(yTax)}</td>
         <td class="highlight">¥${formatNum(multiDirection === 'forward' ? yPost : yPre)}</td>
         <td></td>
+      </tr>`;
+      mobileTbodyHTML += `<tr class="subtotal-row">
+        <td>${yr} 年小计</td>
+        <td>¥${formatNum(multiDirection === 'forward' ? yPre : yPost)}</td>
+        <td></td>
+        <td class="tax-col">¥${formatNum(yTax)}</td>
+        <td class="highlight">¥${formatNum(multiDirection === 'forward' ? yPost : yPre)}</td>
       </tr>`;
     }
   });
@@ -479,41 +534,67 @@ function renderMultiResults(results, plan) {
           <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" onclick="PageShare.shareMulti()"> 分享链接</button>
         </span>
       </div>
-      <div style="overflow-x:auto;">
-        <table class="result-table detail-table${isSalary ? ' salary' : ''}">
+      <div class="only-desktop">
+        <div style="overflow-x:auto;">
+          <table class="result-table detail-table${isSalary ? ' salary' : ''}">
+            <thead>
+              <tr>
+                <th>月份</th>
+                <th>备注</th>
+                <th>${inLabel}</th>
+                ${isSalary ? '<th>三险一金(个人)</th><th>单位社保公积金</th><th>专项附加</th>' : '<th>本次预扣收入额</th>'}
+                <th>累计发放金额</th>
+                <th>累计减除费用</th>
+                <th>累计应纳税所得额</th>
+                <th>适用税率</th>
+                <th>本期预扣税额</th>
+                <th>${outLabel}</th>
+                <th>政策类型</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tbodyHTML}
+              <tr class="total-row">
+                <td colspan="2">合计</td>
+                <td>¥${formatNum(multiDirection === 'forward' ? totalPre : totalPost)}</td>
+                ${isSalary
+                  ? `<td>¥${formatNum(totalSI)}</td><td>¥${formatNum(totalEmployer)}</td><td>¥${formatNum(totalExtra)}</td>`
+                  : `<td>¥${formatNum(results.reduce((s,r) => s + r.withholdingIncome, 0))}</td>`}
+                <td></td>
+                <td>¥${formatNum(results.reduce((s,r) => s + (r.cumDeduction || 0), 0))}</td>
+                <td></td>
+                <td></td>
+                <td class="tax-col">¥${formatNum(totalTax)}</td>
+                <td class="highlight">¥${formatNum(multiDirection === 'forward' ? totalPost : totalPre)}</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="only-mobile" style="padding:4px 12px 12px;">
+        <table class="result-table m-compact">
           <thead>
             <tr>
               <th>月份</th>
-              <th>备注</th>
               <th>${inLabel}</th>
-              ${isSalary ? '<th>三险一金(个人)</th><th>单位社保公积金</th><th>专项附加</th>' : '<th>本次预扣收入额</th>'}
-              <th>累计发放金额</th>
-              <th>累计减除费用</th>
-              <th>累计应纳税所得额</th>
-              <th>适用税率</th>
-              <th>本期预扣税额</th>
+              <th>税率</th>
+              <th>本期预扣</th>
               <th>${outLabel}</th>
-              <th>政策类型</th>
             </tr>
           </thead>
           <tbody>
-            ${tbodyHTML}
+            ${mobileTbodyHTML}
             <tr class="total-row">
-              <td colspan="2">合计</td>
+              <td>合计</td>
               <td>¥${formatNum(multiDirection === 'forward' ? totalPre : totalPost)}</td>
-              ${isSalary
-                ? `<td>¥${formatNum(totalSI)}</td><td>¥${formatNum(totalEmployer)}</td><td>¥${formatNum(totalExtra)}</td>`
-                : `<td>¥${formatNum(results.reduce((s,r) => s + r.withholdingIncome, 0))}</td>`}
-              <td></td>
-              <td>¥${formatNum(results.reduce((s,r) => s + (r.cumDeduction || 0), 0))}</td>
-              <td></td>
               <td></td>
               <td class="tax-col">¥${formatNum(totalTax)}</td>
               <td class="highlight">¥${formatNum(multiDirection === 'forward' ? totalPost : totalPre)}</td>
-              <td></td>
             </tr>
           </tbody>
         </table>
+        <div style="font-size:11px;color:var(--t-text-3);padding:6px 2px 0;">点击月份右侧按钮展开该月完整明细</div>
       </div>
     </div>
   `;

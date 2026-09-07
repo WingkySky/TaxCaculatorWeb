@@ -17,6 +17,46 @@ function escAttr(s) {
 
 function toggleNoteDetail(el) { el.classList.toggle('expanded'); }
 
+/**
+ * 移动端逐月明细（方案C 分层展开）：展开/收起紧凑行的次行明细。
+ * 展开态仅是 DOM class，不入 TaxState；多行可同时展开。
+ */
+function toggleMobileDetailRow(btn) {
+  const tr = btn.closest('tr');
+  const detail = tr && tr.nextElementSibling;
+  if (!detail || !detail.classList.contains('m-detail-row')) return;
+  const open = detail.classList.toggle('open');
+  btn.classList.toggle('open', open);
+}
+
+/**
+ * 宽表滑动增强：检测 .scroll-x 容器是否可横向滚动——
+ * 可滚时加 .is-scrollable（吸附首列 + 右缘淡出），滚到最右加 .at-end（隐藏淡出）。
+ * 各渲染入口渲染后调用一次；滚动与窗口缩放由顶层一次性监听重算。
+ */
+function enhanceScrollX() {
+  document.querySelectorAll('.scroll-x').forEach(box => {
+    const scrollable = box.scrollWidth > box.clientWidth + 1;
+    box.classList.toggle('is-scrollable', scrollable);
+    if (scrollable) {
+      box.classList.toggle('at-end', box.scrollLeft + box.clientWidth >= box.scrollWidth - 1);
+    } else {
+      box.classList.remove('at-end');
+    }
+  });
+}
+
+/* 滚动位置与窗口尺寸变化时重算淡出态（scroll 事件不冒泡，走捕获；绑定一次覆盖所有动态容器） */
+(function bindScrollXListeners() {
+  document.addEventListener('scroll', e => {
+    const t = e.target;
+    if (t && t.classList && t.classList.contains('scroll-x') && t.classList.contains('is-scrollable')) {
+      t.classList.toggle('at-end', t.scrollLeft + t.clientWidth >= t.scrollWidth - 1);
+    }
+  }, true);
+  window.addEventListener('resize', enhanceScrollX);
+})();
+
 /* ---------- 内联 SVG 图标（Lucide 线条风格，24×24 stroke） ---------- */
 const ICON_PATHS = {
   calendar: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
@@ -52,5 +92,5 @@ function icon(name, size) {
     'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + '</svg>';
 }
 
-  window.UI = { escAttr,toggleNoteDetail, icon, ICON_PATHS };
+  window.UI = { enhanceScrollX,escAttr,icon,toggleMobileDetailRow,toggleNoteDetail,ICON_PATHS };
 })();

@@ -861,6 +861,133 @@ function runPolicySyncTests() {
   return { passed: t.length - failed.length, total: t.length, failed };
 }
 
+/* ==================== 手机端表格渲染自检 ====================
+   双 DOM 结构存在性、紧凑表列数、方向文案分支、批量宽表 scroll-x 容器；
+   Node 门内 document.getElementById 为一次性 stub，无法读回 innerHTML，
+   这里临时换成缓存版渲染后取 HTML，结束还原（浏览器内为真 DOM，直接生效）。 */
+
+function runMobileTableTests() {
+  const t = [];
+  const isTrue = (name, cond) => {
+    t.push({ name, ok: !!cond, actual: cond ? 1 : 0, expected: 1 });
+  };
+
+  const origGetById = document.getElementById;
+  const els = Object.create(null);
+  const cachedStubEl = () => ({
+    style: {}, value: '', checked: false, innerHTML: '',
+    classList: { add() {}, remove() {}, toggle() {} },
+    querySelector: () => null, querySelectorAll: () => [], addEventListener() {}
+  });
+  document.getElementById = id => els[id] || (els[id] = cachedStubEl());
+
+  const savedIncomeType = incomeType, savedDir = multiDirection;
+  try {
+    const mkRow = (month, amount, over) => Object.assign({
+      month, note: '1月', amount,
+      preTax: amount, postTax: round2(amount * 0.97), currentTax: 100,
+      socialInsurance: 300, extraDeduction: 0, withholdingIncome: amount,
+      cumIncome: amount, cumDeduction: 5000, taxableIncome: 1000, rate: 0.03, quick: 0,
+      _isBonus: false, _bonusSeparate: false, _siDetail: null, _policyLabel: '自定义政策',
+      _yearFallback: false, _isGap: false, _isOldPolicy: false, _extraMsgs: [], _medicalAnnual: 0
+    }, over || {});
+    const compactHead = html => (html.match(/m-compact[\s\S]*?<\/thead>/) || [''])[0];
+
+    // —— 多月·逐月明细：工资模式正算 ——
+    incomeType = 'salary'; multiDirection = 'forward';
+    PageMulti.renderMultiResults([mkRow('2026-01', 15000), mkRow('2026-02', 15000)], null);
+    let html = els['multi-result'].innerHTML;
+    isTrue('双DOM·桌面明细表存在', html.includes('only-desktop') && html.includes('detail-table'));
+    isTrue('双DOM·移动紧凑表存在', html.includes('only-mobile') && html.includes('m-compact'));
+    isTrue('双DOM·展开明细行存在', html.includes('m-detail-row') && html.includes('UI.toggleMobileDetailRow'));
+    const mHead = compactHead(html);
+    isTrue('紧凑表·5列（月份/输入/税率/预扣/输出）', (mHead.match(/<th>/g) || []).length === 5);
+    isTrue('紧凑表·正算输入列=应发工资', mHead.includes('>应发工资<'));
+    isTrue('紧凑表·正算输出列=实发工资', mHead.includes('>实发工资<'));
+    isTrue('紧凑表·合计行存在', /class="total-row"[\s\S]*?<td>合计<\/td>/.test(html));
+    isTrue('紧凑表·明细网格含工资专属列', html.includes('三险一金(个人)') && html.includes('单位社保公积金') && html.includes('专项附加'));
+
+    // —— 方向文案分支：工资反算 ——
+    multiDirection = 'reverse';
+    PageMulti.renderMultiResults([mkRow('2026-01', 15000)], null);
+    html = els['multi-result'].innerHTML;
+    const mHead2 = compactHead(html);
+    isTrue('紧凑表·反算输入列=期望实发（已知）', mHead2.includes('>期望实发（已知）<'));
+    isTrue('紧凑表·反算输出列=应发工资（反算）', mHead2.includes('>应发工资（反算）<'));
+
+    // —— 列集分支：劳务模式 ——
+    incomeType = 'labor'; multiDirection = 'forward';
+    PageMulti.renderMultiResults([mkRow('2026-01', 8000)], null);
+    html = els['multi-result'].innerHTML;
+    isTrue('紧凑表·劳务模式明细含预扣收入额', html.includes('本次预扣收入额'));
+    isTrue('紧凑表·劳务模式不含社保列', !html.includes('三险一金(个人)'));
+
+    // —— 年终奖方案对比卡：正向双方案 → 移动卡；反算 reverseOnly → 维持文字卡 ——
+    incomeType = 'salary';
+    const plan = {
+      bonus: 30000, bonusMonth: '2026-12', separateTax: 900, separateTotalTax: 2000,
+      combinedBonusTax: 1500, combinedTotalTax: 2600, recommendation: 'separate',
+      saving: 600, chosen: 'separate', trap: null
+    };
+    PageMulti.renderMultiResults([mkRow('2026-01', 15000)], plan);
+    html = els['multi-result'].innerHTML;
+    isTrue('年终奖·桌面对比表存在', html.includes('only-desktop') && html.includes('年终奖方案对比'));
+    isTrue('年终奖·移动方案卡数=2', (html.match(/m-bonus-card/g) || []).length === 2);
+    isTrue('年终奖·移动卡含当前徽标', html.includes('class="cur"'));
+    PageMulti.renderMultiResults([mkRow('2026-01', 15000)], Object.assign({}, plan, { reverseOnly: true }));
+    html = els['multi-result'].innerHTML;
+    isTrue('年终奖·反算方向维持文字卡（无移动卡）', html.includes('单独计税') && !html.includes('m-bonus-card'));
+
+    // —— 行为件存在 ——
+    isTrue('UI.toggleMobileDetailRow 可用', typeof UI.toggleMobileDetailRow === 'function');
+    isTrue('UI.enhanceScrollX 可用', typeof UI.enhanceScrollX === 'function');
+
+    // —— 批量页：4 张表容器统一 scroll-x（enhanceScrollX 的作用对象） ——
+    incomeType = 'salary';
+    PageBatch.showColumnMappingUI(
+      [['姓名', '月份', '金额'], ['张三', '2026-01', '15000'], ['李四', '2026-02', '8000']],
+      ['姓名', '月份', '金额'], 0,
+      [['张三', '2026-01', '15000'], ['李四', '2026-02', '8000']], '映射自测.csv'
+    );
+    html = els['batch-preview'].innerHTML;
+    isTrue('批量·列映射预览表 scroll-x 容器', html.includes('class="scroll-x"'));
+
+    PageBatch.processWithMapping(
+      [['张三', '2026-01', '15000'], ['张三', '2026-02', '15000'], ['李四', '2026-01', '8000']],
+      { name: 0, month: 1, amount: 2 }, '自测.csv'
+    );
+    html = els['batch-preview'].innerHTML;
+    isTrue('批量·预览两表（人员汇总+数据明细）scroll-x 容器≥2', (html.match(/class="scroll-x"/g) || []).length >= 2);
+
+    const mkBatchRow = month => ({
+      person: '张三', personKey: 'k', month, preTax: 15000, postTax: 14500, currentTax: 100,
+      socialInsurance: 0, extraDeduction: 0, cumIncome: 15000, cumDeduction: 5000,
+      taxableIncome: 1000, rate: 0.03, quick: 0, withholdingIncome: 15000,
+      cityName: '自定义', policyYearLabel: 'custom', idCard: '', phone: '', bankCard: '',
+      _isGap: false, _isOldPolicy: false, _siDetail: null, _isBonus: false
+    });
+    const r1 = mkBatchRow('2026-01'), r2 = mkBatchRow('2026-02');
+    PageBatch.renderBatchResults([r1, r2], '自测.csv', ['k'], { k: { name: '张三', records: [r1, r2] } }, {});
+    html = els['batch-result'].innerHTML;
+    isTrue('批量·结果表 scroll-x 容器', html.includes('class="scroll-x"'));
+  } finally {
+    document.getElementById = origGetById;
+    incomeType = savedIncomeType;
+    multiDirection = savedDir;
+  }
+
+  const failed = t.filter(x => !x.ok);
+  const summary = `${t.length - failed.length}/${t.length} 通过`;
+  if (failed.length) {
+    console.group('🧪 手机端表格渲染自检：' + summary);
+    failed.forEach(f => console.error(`✗ ${f.name}：期望 ${f.expected}，实际 ${f.actual}`));
+    console.groupEnd();
+  } else {
+    console.log('🧪 手机端表格渲染自检： ' + summary);
+  }
+  return { passed: t.length - failed.length, total: t.length, failed };
+}
+
 // ==================== 聚合入口 ====================
 
 /** 全部套件聚合：浏览器自动执行与 node tests/run.js 共用同一入口 */
@@ -871,7 +998,8 @@ function runAll() {
     { name: '导出器组装', result: runExporterTests() },
     { name: '年度汇算', result: runAnnualTests() },
     { name: '分享链接', result: runShareTests() },
-    { name: '政策库同步', result: runPolicySyncTests() }
+    { name: '政策库同步', result: runPolicySyncTests() },
+    { name: '手机端表格渲染', result: runMobileTableTests() }
   ];
   const failed = [];
   suites.forEach(s => s.result.failed.forEach(f => failed.push(Object.assign({ suite: s.name }, f))));

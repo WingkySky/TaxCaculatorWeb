@@ -32,6 +32,8 @@ globalThis.document = {
   body: stubEl()
 };
 globalThis.location = { hash: '', href: '' };
+/* ui.js 顶层绑定 resize/scroll 监听（window 上），Node 无此 API，补桩吸收 */
+globalThis.addEventListener = globalThis.addEventListener || function () {};
 
 [
   'tax-policy-data.js',

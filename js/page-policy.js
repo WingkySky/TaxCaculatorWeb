@@ -151,27 +151,53 @@ function renderPolicyEditor() {
   const numInput = (cityKey, yk, itemKey, field, value, step, placeholder) =>
     `<input class="pm-item-input" type="number" step="${step}" placeholder="${placeholder || ''}" value="${value == null ? '' : value}"
       onchange="PagePolicy.onPmItemInput('${cityKey}','${yk}','${itemKey}','${field}',this.value)">`;
+  /* 移动形态：险种字段卡（偏方案B）——卡头=险种名（+待核对），卡体=数字输入竖排 */
+  const pmMobileCard = (it, item) => {
+    if (!item) {
+      return `<div class="pm-card">
+        <div class="pm-card-head">${SI_ITEM_LABELS[it.key]}</div>
+        <div style="color:var(--t-text-2);font-size:13px;">—</div>
+      </div>`;
+    }
+    const isFund = it.key === 'fund';
+    return `<div class="pm-card">
+      <div class="pm-card-head"><span>${it.label}${item.pending ? ' <span class="pending">待核对</span>' : ''}</span></div>
+      <div class="pm-card-fields">
+        <div class="f"><label>个人比例（%）</label>${numInput(window._pmCity, window._pmYear, it.key, 'personal', round2((item.personal || 0) * 100), 0.1, '8')}${badge(it.key, 'personal')}</div>
+        <div class="f"><label>单位比例（%）</label>${numInput(window._pmCity, window._pmYear, it.key, 'employer', item.employer == null ? '' : round2(item.employer * 100), 0.1, isFund ? '同个人档' : '0')}${badge(it.key, 'employer')}</div>
+        <div class="f"><label>基数下限</label>${numInput(window._pmCity, window._pmYear, it.key, 'lower', item.lower, 0.01, '不限')}${badge(it.key, 'lower')}</div>
+        <div class="f"><label>基数上限</label>${numInput(window._pmCity, window._pmYear, it.key, 'upper', item.upper, 0.01, '不限')}${badge(it.key, 'upper')}</div>
+        ${isFund ? `<div class="f wide"><label>公积金比例档（%，逗号分隔）</label><input class="pm-item-input" value="${(item.rates || []).map(r => round2(r * 100)).join(',')}"
+          onchange="PagePolicy.onPmFundRatesInput(this.value)">${badge(it.key, 'rates')}</div>` : ''}
+      </div>
+    </div>`;
+  };
   document.getElementById('pm-items-wrap').innerHTML = `
-    <div style="overflow-x:auto;border:1px solid var(--t-border);border-radius:8px;">
-      <table class="result-table" style="font-size:12px;">
-        <thead><tr><th>险种</th><th>个人比例（%）</th><th>单位比例（%）</th><th>基数下限</th><th>基数上限</th><th>公积金比例档（%，逗号分隔）</th></tr></thead>
-        <tbody>
-          ${SI_ITEMS.map(it => {
-            const item = rec.items[it.key];
-            if (!item) return `<tr><td>${SI_ITEM_LABELS[it.key]}</td><td colspan="5" style="color:var(--t-text-2);">—</td></tr>`;
-            const isFund = it.key === 'fund';
-            return `<tr>
-              <td>${it.label}${item.pending ? ' <span style="color:var(--t-warning);font-size:10px;">待核对</span>' : ''}</td>
-              <td>${numInput(window._pmCity, window._pmYear, it.key, 'personal', round2((item.personal || 0) * 100), 0.1, '8')}${badge(it.key, 'personal')}</td>
-              <td>${numInput(window._pmCity, window._pmYear, it.key, 'employer', item.employer == null ? '' : round2(item.employer * 100), 0.1, isFund ? '同个人档' : '0')}${badge(it.key, 'employer')}</td>
-              <td>${numInput(window._pmCity, window._pmYear, it.key, 'lower', item.lower, 0.01, '不限')}${badge(it.key, 'lower')}</td>
-              <td>${numInput(window._pmCity, window._pmYear, it.key, 'upper', item.upper, 0.01, '不限')}${badge(it.key, 'upper')}</td>
-              <td>${isFund ? `<input class="pm-item-input" value="${(item.rates || []).map(r => round2(r * 100)).join(',')}"
-                    onchange="PagePolicy.onPmFundRatesInput(this.value)">${badge(it.key, 'rates')}` : '<span style="color:var(--t-text-2);">—</span>'}</td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
+    <div class="only-desktop">
+      <div style="overflow-x:auto;border:1px solid var(--t-border);border-radius:8px;">
+        <table class="result-table" style="font-size:12px;">
+          <thead><tr><th>险种</th><th>个人比例（%）</th><th>单位比例（%）</th><th>基数下限</th><th>基数上限</th><th>公积金比例档（%，逗号分隔）</th></tr></thead>
+          <tbody>
+            ${SI_ITEMS.map(it => {
+              const item = rec.items[it.key];
+              if (!item) return `<tr><td>${SI_ITEM_LABELS[it.key]}</td><td colspan="5" style="color:var(--t-text-2);">—</td></tr>`;
+              const isFund = it.key === 'fund';
+              return `<tr>
+                <td>${it.label}${item.pending ? ' <span style="color:var(--t-warning);font-size:10px;">待核对</span>' : ''}</td>
+                <td>${numInput(window._pmCity, window._pmYear, it.key, 'personal', round2((item.personal || 0) * 100), 0.1, '8')}${badge(it.key, 'personal')}</td>
+                <td>${numInput(window._pmCity, window._pmYear, it.key, 'employer', item.employer == null ? '' : round2(item.employer * 100), 0.1, isFund ? '同个人档' : '0')}${badge(it.key, 'employer')}</td>
+                <td>${numInput(window._pmCity, window._pmYear, it.key, 'lower', item.lower, 0.01, '不限')}${badge(it.key, 'lower')}</td>
+                <td>${numInput(window._pmCity, window._pmYear, it.key, 'upper', item.upper, 0.01, '不限')}${badge(it.key, 'upper')}</td>
+                <td>${isFund ? `<input class="pm-item-input" value="${(item.rates || []).map(r => round2(r * 100)).join(',')}"
+                  onchange="PagePolicy.onPmFundRatesInput(this.value)">${badge(it.key, 'rates')}` : '<span style="color:var(--t-text-2);">—</span>'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="only-mobile">
+      ${SI_ITEMS.map(it => pmMobileCard(it, rec.items[it.key])).join('')}
     </div>
     <div style="font-size:11px;color:var(--t-text-2);margin-top:6px;">比例与上下限留空表示不限制；公积金单位比例留空表示与个人同档；修改后立即生效（编辑过的险种会移除「待核对」标记）${diff ? '；与官方默认不同的字段标 <span class="pm-restore-btn" style="cursor:default;">⟲</span>，点击可恢复官方值' : ''}。</div>`;
 }

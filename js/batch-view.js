@@ -152,7 +152,7 @@ function showColumnMappingUI(rawRows, headerRow, headerRowIndex, dataRows, filen
 
       <div style="margin-bottom:12px;">
         <div style="font-size:13px;font-weight:600;color:var(--t-text-2);margin-bottom:8px;"> 原始数据预览（前 ${sampleCount} 行）</div>
-        <div style="overflow-x:auto;border:1px solid var(--t-border);border-radius:8px;">
+        <div class="scroll-x" style="border:1px solid var(--t-border);border-radius:8px;">
           <table class="result-table" style="font-size:12px;">
             <thead><tr>${previewHeadHTML}</tr></thead>
             <tbody>${previewRowsHTML}</tbody>
@@ -166,6 +166,7 @@ function showColumnMappingUI(rawRows, headerRow, headerRowIndex, dataRows, filen
       </div>
     </div>
   `;
+  UI.enhanceScrollX();
 }
 
 function renderSourceSelectionHTML(sourceItems) {
@@ -343,7 +344,7 @@ function showBatchPreview(parsed, personKeys, personsMap, filename) {
           <div style="font-size:13px;font-weight:600;color:var(--t-text-2);"> 人员汇总（${personKeys.length} 人）</div>
           ${personKeys.length > 15 ? `<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="PageBatch.togglePersonTable(this)">展开全部</button>` : ''}
         </div>
-        <div style="overflow-x:auto;border:1px solid var(--t-border);border-radius:8px;">
+        <div class="scroll-x" style="border:1px solid var(--t-border);border-radius:8px;">
           <table class="result-table" style="font-size:13px;">
             <thead>
               <tr>
@@ -377,7 +378,7 @@ function showBatchPreview(parsed, personKeys, personsMap, filename) {
           <div style="font-size:13px;font-weight:600;color:var(--t-text-2);"> 数据明细（${parsed.length} 条）</div>
           ${parsed.length > 10 ? `<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="PageBatch.togglePreviewTable(this)">展开全部</button>` : ''}
         </div>
-        <div style="overflow-x:auto;border:1px solid var(--t-border);border-radius:8px;">
+        <div class="scroll-x" style="border:1px solid var(--t-border);border-radius:8px;">
           <table class="result-table" style="font-size:13px;">
             <thead><tr>${previewHeadCols}</tr></thead>
             <tbody>
@@ -428,6 +429,7 @@ function showBatchPreview(parsed, personKeys, personsMap, filename) {
       batchDirection = dir;
     });
   });
+  UI.enhanceScrollX();
 }
 
 function renderBatchResults(results, filename, personKeys, personsMap, identityFlags) {
@@ -553,7 +555,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
           ${isSalary ? `<span style="font-size:12px;color:var(--t-text-2);">单位社保 <span style="color:var(--t-text-2);font-weight:600;">¥${formatNum(personEmployer)}</span></span>
           <span style="font-size:12px;color:var(--t-text-2);">企业总成本 <span style="color:var(--t-warning);font-weight:600;">¥${formatNum(round2(personPre + personEmployer))}</span></span>` : ''}
         </div>
-        <div style="overflow-x:auto;border:1px solid var(--t-border);border-radius:0 0 8px 8px;">
+        <div class="scroll-x" style="border:1px solid var(--t-border);border-radius:0 0 8px 8px;">
           <table class="result-table">
             <thead>
               <tr>
@@ -632,6 +634,7 @@ function renderBatchResults(results, filename, personKeys, personsMap, identityF
   `;
 
   window._batchResults = results;
+  UI.enhanceScrollX();
 }
   window.BatchView = { confirmColumnMapping, onMappingChange, refreshBatchPreview, renderBatchResults,
     renderSourceSelectionHTML, selectOnlySource, setPreviewSource, showBatchPreview, showColumnMappingUI,

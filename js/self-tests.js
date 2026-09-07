@@ -473,6 +473,15 @@ function runBatchPipelineTests() {
   batchGrossAsBase = savedBatch.grossAsBase;
   batchGapReset = savedBatch.gap;
 
+  // —— 清理测试副作用：端到端用例走真实上传通道 processWithMapping，
+  //    会把「回归测试.csv」灌进批量页会话状态并渲染预览——不还原的话
+  //    用户每次打开页面都会在批量计算页看到这份数据（2026-09-07 用户报告） ——
+  window._batchParsed = null;
+  window._batchFilename = null;
+  window._batchResults = null;
+  const previewEl = document.getElementById('batch-preview');
+  if (previewEl) { previewEl.style.display = 'none'; previewEl.innerHTML = ''; }
+
   const failed = t.filter(x => !x.ok);
   const summary = `${t.length - failed.length}/${t.length} 通过`;
   if (failed.length) {

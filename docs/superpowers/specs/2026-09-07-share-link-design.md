@@ -74,3 +74,11 @@
 - 浏览器冒烟全过：多月分享（生成 payload 含参数 → resetMulti 模拟新收件人 → 打开链接自动还原 12 月并计算 12 行结果 → 横幅显示 → 清除后输入清空回多月页）；汇算分享（打开即还原工资/劳务/房贷并自动计算，标准算例 payload 直接复现应补 780）；损坏链接防呆提示并回落多月页。
 - 实现说明：自动计算直接调用已导出的 `PageMulti.calcMulti` / `PageAnnual.calc`（无需 DOM 触发）；`share` 路由在 `renderRoute` 特判转发给 `PageShare.applyShare`，由其还原数据后导航到目标页；`currentRoute` 增加对 hash 中 `?query` 的剥离。
 - 冒烟方法沿用 no-store 服务器（IAB 缓存教训，见记忆 taxcalc-browser-verification）。
+
+## 修复记录（2026-09-07，用户实测反馈）
+
+用户本地直开分享链接无数据显示。插桩定位（init/render/applyShare 全链日志）：
+
+- **根因**：初始加载时 hash 即 `#/share`，`initRouting` 的首次 `renderRoute` 会在 `PageAnnual.render()`（init 后续步骤）执行**之前**进入 `PageShare.applyShare()`——还原写入的是空页面，`calc()` 撞上未渲染的 `ann-year` 抛 TypeError，**init 整个中断**（页面半初始化、自检不跑）。
+- **修复**：`app.js` 加 `booted` 标志——启动期的 share 路由先跳过（`renderRoute` 直接 return），init 完成后统一检测 `currentRoute()==='share'` 再执行 `applyShare`；运行期跳转分享链接仍即时处理。
+- **验证**：headless 冷启动直开 `file:///…#/share?d=…`——页面完整渲染、自动计算、横幅显示、应补 780、零 JS 错误、自检正常；普通加载对照无回归；`node tests/run.js` 161/161。IAB 复验时收件端按本地参数（北京默认）算出应补 420——与横幅「结果按收件人本地政策数据得出」的分享语义一致，属正确行为。

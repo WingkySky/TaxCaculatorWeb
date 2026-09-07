@@ -22,9 +22,14 @@
     location.hash = '#/' + route;
   }
 
+  let booted = false;   // 启动期的 share 路由延后到 init 末尾处理（页面/各模块就绪后才能还原数据）
+
   function renderRoute() {
     const route = currentRoute();
-    if (route === 'share') { PageShare.applyShare(); return; }   // 分享路由：还原数据后由 applyShare 导航到目标页
+    if (route === 'share') {
+      if (booted) PageShare.applyShare();   // 运行期跳转分享链接
+      return;                               // 启动期：由 init 末尾统一处理，避免在页面初始化前还原数据
+    }
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const page = document.getElementById('page-' + route);
     if (page) page.classList.add('active');
@@ -160,6 +165,10 @@
 
     // 自检（初始化完成后运行，console 输出结果；node tests/run.js 跑同一份断言）
     if (window.TaxTest) TaxTest.runAll();
+
+    // 直开分享链接（hash 即 #/share）：待页面与各模块就绪后再还原数据
+    booted = true;
+    if (currentRoute() === 'share') PageShare.applyShare();
   }
 
   window.App = { navigate, setIncomeType, init };

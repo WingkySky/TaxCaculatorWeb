@@ -2,7 +2,7 @@
  * tests/run.js — 零依赖 Node 回归门
  * 职责：无浏览器环境按 index.html 顺序加载源文件（子集，不含
  *       page-policy/page-rules/app），执行 TaxTest.runAll() 全部自检
- *       （计税与政策库 + 批量计税流水线 + 导出器组装），任一失败退出码 1。
+ *       （计税与政策库 + 批量计税流水线 + 导出器组装 + 导出样式规格），任一失败退出码 1。
  * 运行：node tests/run.js（Git Bash / PowerShell 通用）。
  * 维护约定：js/ 源码加载期用到新 DOM API 时在此补桩吸收，不改源码。
  * ============================================================ */
@@ -38,7 +38,7 @@ globalThis.addEventListener = globalThis.addEventListener || function () {};
 [
   'tax-policy-data.js',
   'js/state.js', 'js/utils.js', 'js/tax-engine.js', 'js/policy-library.js',
-  'js/social-insurance.js', 'js/exporter.js', 'js/ui.js', 'js/page-shared.js',
+  'js/social-insurance.js', 'js/export-style.js', 'js/exporter.js', 'js/ui.js', 'js/page-shared.js',
   'js/annual-engine.js',
   'js/page-multi.js',
   'js/batch-parse.js', 'js/batch-calc.js', 'js/batch-source.js', 'js/batch-view.js', 'js/batch-export.js',

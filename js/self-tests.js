@@ -3,7 +3,7 @@
  * 职责：六套件自检——计税与政策库 + 批量计税流水线 + 导出器组装 + 年度汇算 +
  *       分享链接 + 政策库同步，页面加载后自动运行并输出 console；
  *       node tests/run.js 跑同一份断言。
- * 对外接口：window.TaxTest.{runSelfTests, runBatchPipelineTests, runExporterTests, runAll}。
+ * 对外接口：window.TaxTest.{runSelfTests, runBatchPipelineTests, runExporterTests, runExportStyleTests, runAll}。
  * 依赖：TaxEngine/PolicyLib/SocialIns/Exporter/PageShared/PageMulti/PageBatch/TaxState/TaxUtils。
  * ============================================================ */
 (function () {
@@ -600,6 +600,125 @@ function runExporterTests() {
   return { passed: t.length - failed.length, total: t.length, failed };
 }
 
+// ==================== 导出样式规格自检 ====================
+// ExportStyle 纯规格层：列分组无缝无叠全覆盖（34/37 列）、语义色与数字格式映射、
+// 行类型底色、dataStartRow 公式行号随动（默认行为回归保护）、汇总配对收集、
+// SUMIFS 精确构造与汇总缓存合计。不碰 ExcelJS/下载 IO（属浏览器冒烟）。
+
+function runExportStyleTests() {
+  const t = [];
+  const eq = (name, actual, expected, eps = 0.0001) => {
+    const ok = Math.abs(actual - expected) <= eps;
+    t.push({ name, ok, actual, expected });
+    return ok;
+  };
+  const isTrue = (name, cond) => eq(name, cond ? 1 : 0, 1);
+
+  const saved = JSON.parse(JSON.stringify(salaryParams));
+  salaryParams.cityId = 'custom';
+  const customItems = resolvePolicy('custom', '2026-01').items;
+  const mkRow = (over) => Object.assign({
+    month: '2026-01', person: '测试', preTax: 10000, postTax: 6697.5,
+    cumIncome: 10000, cumDeduction: 8250, taxableIncome: 1750, rate: 0.03, quick: 0,
+    cumTaxDue: 52.5, currentTax: 52.5, extraDeduction: 1000,
+    _siDetail: computeSocialInsuranceDetail(10000, '', customItems, 0.05),
+    _cumSI: 2250, _cumExtra: 1000, _isBonus: false, _bonusSeparate: false
+  }, over || {});
+  const OPTS = { chainKey: (r) => String(r.month || '').split('-')[0], cityOf: () => 'custom', nameOf: () => '测试', cityLabel: () => '自定义政策' };
+  const S = window.ExportStyle;
+
+  const g33 = buildSalaryFormulaGrid([mkRow()], OPTS);
+  const g37 = buildSalaryFormulaGrid(
+    [mkRow({ idCard: '110101199001011234', phone: '13800138000', bankCard: '6222021234561234567' })],
+    Object.assign({}, OPTS, { idCard: true, phone: true, bankCard: true }));
+
+  // —— 列 key 映射与表头一致 ——
+  isTrue('样式规格·cols 映射覆盖全部列（34 列）', S.keyArray(g33.cols).length === 34 && S.keyArray(g33.cols).every(k => !!k));
+  isTrue('样式规格·身份列形态覆盖（37 列）', S.keyArray(g37.cols).length === 37 && S.keyArray(g37.cols).every(k => !!k));
+
+  // —— 分组无缝无叠全覆盖 ——
+  const seg33 = S.resolveGroups(g33.cols, g33.headers.length);
+  isTrue('样式规格·34 列分 7 组且首尾相接', seg33.length === 7 && seg33[0].from === 0 && seg33[6].to === 33
+    && seg33.every((s, i) => i === 0 || seg33[i - 1].to + 1 === s.from));
+  const seg37 = S.resolveGroups(g37.cols, g37.headers.length);
+  isTrue('样式规格·37 列分组全覆盖', seg37[0].to === 6 && seg37[seg37.length - 1].to === 36
+    && seg37.every((s, i) => i === 0 || seg37[i - 1].to + 1 === s.from));
+  isTrue('样式规格·分组标签与淡彩填充齐备', seg33[0].label === '基本信息' && seg33[1].label === '收入与基数输入'
+    && !!seg33[1].fill && !!seg33[1].color);
+
+  // —— 语义色与数字格式 ——
+  isTrue('样式规格·税额红/预扣加粗、实发绿加粗、成本橙', (() => {
+    const curTax = S.colSpec('curTax'), postTax = S.colSpec('postTax'), cost = S.colSpec('cost'), cumDue = S.colSpec('cumDue');
+    return curTax.color === S.PAL.taxText && curTax.bold
+      && postTax.color === S.PAL.postTaxText && postTax.bold
+      && cost.color === S.PAL.costText && !cost.bold
+      && cumDue.color === S.PAL.taxText && !cumDue.bold;
+  })());
+  isTrue('样式规格·比率百分比、文本锁 @、金额交由 writer 千分位', S.colSpec('fundRate').numFmt === '0%'
+    && S.colSpec('rate').numFmt === '0%' && S.colSpec('idCard').numFmt === '@'
+    && S.colSpec('month').numFmt === '@' && S.colSpec('amount').numFmt === null);
+
+  // —— 列宽与行底色 ——
+  isTrue('样式规格·数值列宽保底 12、备注列 24、超长表头封顶 24', S.colWidth('amount', '应发') >= 12
+    && S.colWidth('note', '备注') === 24 && S.colWidth('name', '姓名的姓名的姓名的姓名的姓名') === 24);
+  isTrue('样式规格·斑马纹与年终奖行底色（bonus 优先）', S.rowFill(1, {}) === S.PAL.zebra
+    && S.rowFill(1, { bonus: true }) === S.PAL.bonusRow && S.rowFill(0, {}) === null);
+
+  // —— dataStartRow：公式行号随动，默认行为不变 ——
+  const revRow = { preTax: 12337.11, postTax: 10000, cumTaxDue: 287.11, currentTax: 287.11, taxableIncome: 4087.11 };
+  const gOff = buildSalaryFormulaGrid([mkRow(revRow)], Object.assign({}, OPTS, { dataStartRow: 5 }));
+  isTrue('样式规格·dataStartRow=5 时实发公式行号 E5-M5-AE5', gOff.rows[0][31].f === 'E5-M5-AE5' && gOff.maxRow === 5);
+  const gDef = buildSalaryFormulaGrid([mkRow(revRow)], OPTS);
+  isTrue('样式规格·默认 dataStartRow 保持旧行号（回归保护）', gDef.rows[0][31].f === 'E2-M2-AE2' && gDef.maxRow === 2);
+
+  // —— rowsMeta 行类型标记 ——
+  const gMeta = buildSalaryFormulaGrid([
+    mkRow(),
+    mkRow({ month: '2027-01', cumIncome: 8000 }),
+    mkRow({ month: '2027-02', _isBonus: true, _bonusSeparate: true, preTax: 36000, cumIncome: 44000, rate: 0.03, quick: 0, cumTaxDue: 1080, currentTax: 1080, postTax: 34920 })
+  ], OPTS);
+  isTrue('样式规格·rowsMeta：链首/跨年重置/单独年终奖标记', gMeta.rowsMeta[0].chainStart === true
+    && gMeta.rowsMeta[1].chainStart === true && gMeta.rowsMeta[1].bonus === false && gMeta.rowsMeta[2].bonus === true);
+
+  // —— 汇总：配对收集去重保序 + SUMIFS 精确构造 ——
+  const pairs = S.collectSummaryPairs([
+    mkRow(),
+    mkRow({ month: '2026-02', cumIncome: 20000 }),
+    mkRow({ month: '2027-01', cumIncome: 8000 }),
+    mkRow({ month: '2027-01', person: '李四', cumIncome: 8000 })
+  ], (r) => r.person);
+  isTrue('样式规格·汇总配对按出现序去重（人×年）', pairs.length === 3
+    && pairs[0].name === '测试' && pairs[0].year === '2026'
+    && pairs[1].name === '测试' && pairs[1].year === '2027'
+    && pairs[2].name === '李四' && pairs[2].year === '2027');
+  const fs = S.summaryFormulas({ sheet: '工资计算明细', cols: g33.cols, firstRow: 5, lastRow: 16 }, { name: '测试', year: '2026' });
+  isTrue('样式规格·SUMIFS 精确构造（金额 E + 姓名 A + 月份 B 年通配）',
+    fs.amount === `SUMIFS('工资计算明细'!$E$5:$E$16,'工资计算明细'!$A$5:$A$16,"测试",'工资计算明细'!$B$5:$B$16,"2026*")`
+    && fs.curTax === `SUMIFS('工资计算明细'!$AE$5:$AE$16,'工资计算明细'!$A$5:$A$16,"测试",'工资计算明细'!$B$5:$B$16,"2026*")`);
+
+  // —— 汇总缓存合计（与明细网格同口径：应发/个人三险/税/实发/用工成本） ——
+  const rA = mkRow({ person: '张三', preTax: 10000, currentTax: 52.5, postTax: 6697.5 });
+  const rB = mkRow({ person: '张三', month: '2026-02', preTax: 12000, currentTax: 170, postTax: 10080, cumIncome: 22000 });
+  const sumMeta = Exporter.buildSummaryMeta([rA, rB], (r) => r.person);
+  isTrue('样式规格·汇总缓存合计=逐行求和', sumMeta.length === 1 && sumMeta[0].vals.amount === 22000
+    && sumMeta[0].vals.curTax === 222.5 && sumMeta[0].vals.postTax === 16777.5
+    && sumMeta[0].vals.siTotal === round2(rA._siDetail.total + rB._siDetail.total)
+    && sumMeta[0].vals.cost === round2(22000 + rA._siDetail.employer.total + rB._siDetail.employer.total));
+
+  Object.assign(salaryParams, saved);
+
+  const failed = t.filter(x => !x.ok);
+  const summary = `${t.length - failed.length}/${t.length} 通过`;
+  if (failed.length) {
+    console.group('🧪 导出样式规格自检：' + summary);
+    failed.forEach(f => console.error(`✗ ${f.name}：期望 ${f.expected}，实际 ${f.actual}`));
+    console.groupEnd();
+  } else {
+    console.log('🧪 导出样式规格自检： ' + summary);
+  }
+  return { passed: t.length - failed.length, total: t.length, failed };
+}
+
 // ==================== 年度汇算自检 ====================
 // 收入额折算三类口径、劳务/工资预扣估算与累计预扣引擎一致、
 // settle 标准算例（应退 780 验收锚点）、手填覆盖、免汇算边界、空输入防呆。
@@ -996,6 +1115,7 @@ function runAll() {
     { name: '计税与政策库', result: runSelfTests() },
     { name: '批量计税流水线', result: runBatchPipelineTests() },
     { name: '导出器组装', result: runExporterTests() },
+    { name: '导出样式规格', result: runExportStyleTests() },
     { name: '年度汇算', result: runAnnualTests() },
     { name: '分享链接', result: runShareTests() },
     { name: '政策库同步', result: runPolicySyncTests() },
@@ -1011,5 +1131,5 @@ function runAll() {
   };
 }
 
-  window.TaxTest = { runSelfTests, runBatchPipelineTests, runExporterTests, runPolicySyncTests, runAll };
+  window.TaxTest = { runSelfTests, runBatchPipelineTests, runExporterTests, runExportStyleTests, runPolicySyncTests, runAll };
 })();

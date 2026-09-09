@@ -125,6 +125,10 @@
 }
 .topbar .icon-btn:hover { color: var(--t-text); background: var(--t-bg-hover); }
 .topbar .icon-btn svg { width: 18px; height: 18px; }
+/* 主题图标跟随 html.theme-dark 切换（首帧即正确，不依赖 JS 内联样式） */
+#theme-toggle .icon-moon { display: none; }
+html.theme-dark #theme-toggle .icon-moon { display: block; }
+html.theme-dark #theme-toggle .icon-sun { display: none; }
 
 .topbar-income .seg-btn { padding: 4px 14px; font-size: 13px; }
 

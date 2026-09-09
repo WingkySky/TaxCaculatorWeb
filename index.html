@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>个税计算器 · 劳务报酬 / 工资薪金</title>
+<script>
+/* 首帧前恢复主题（anti-FOUC）：必须内联在 CSS 之前，逻辑与 app.js initTheme 保持一致 */
+try {
+  var _t = localStorage.getItem('tc-theme');
+  if (_t ? _t === 'dark' : (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches))
+    document.documentElement.classList.add('theme-dark');
+} catch (e) {}
+</script>
 <link rel="stylesheet" href="css/tokens.css">
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/components.css">
@@ -49,6 +57,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
     </button>
   </aside>
+  <script>try{if(localStorage.getItem('tc-sidebar-collapsed')==='1')document.getElementById('sidebar').classList.add('collapsed')}catch(e){}</script>
   <div class="drawer-mask" id="drawer-mask"></div>
 
   <!-- ==================== 主区 ==================== -->
@@ -65,7 +74,7 @@
       <span class="spacer"></span>
       <button class="icon-btn" id="theme-toggle" title="切换亮暗主题">
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
-        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
       </button>
     </header>
 

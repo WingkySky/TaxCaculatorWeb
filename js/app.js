@@ -77,11 +77,8 @@
 
   /* ---------- 主题（跟随系统 + 手动持久化） ---------- */
   function applyTheme(dark) {
+    // 图标可见性由 CSS（html.theme-dark）驱动，这里只切主题 class
     document.documentElement.classList.toggle('theme-dark', dark);
-    const sun = document.querySelector('#theme-toggle .icon-sun');
-    const moon = document.querySelector('#theme-toggle .icon-moon');
-    if (sun) sun.style.display = dark ? 'none' : '';
-    if (moon) moon.style.display = dark ? '' : 'none';
   }
 
   function initTheme() {
